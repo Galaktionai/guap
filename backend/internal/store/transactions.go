@@ -42,10 +42,10 @@ type TxFilter struct {
 	Offset   int
 }
 
-// ListTransactions returns transactions, newest first.
-func (s *Store) ListTransactions(ctx context.Context, f TxFilter) ([]Transaction, error) {
-	q := txSelect + " WHERE 1 = 1"
-	var args []any
+// ListTransactions returns the user's transactions, newest first.
+func (s *Store) ListTransactions(ctx context.Context, userID int64, f TxFilter) ([]Transaction, error) {
+	q := txSelect + " WHERE a.user_id = ?"
+	args := []any{userID}
 	if f.AssetID != 0 {
 		q += " AND t.asset_id = ?"
 		args = append(args, f.AssetID)
@@ -82,9 +82,9 @@ func (s *Store) ListTransactions(ctx context.Context, f TxFilter) ([]Transaction
 	return list, rows.Err()
 }
 
-// GetTransaction returns one transaction.
-func (s *Store) GetTransaction(ctx context.Context, id int64) (Transaction, error) {
-	t, err := scanTransaction(s.db.QueryRowContext(ctx, txSelect+" WHERE t.id = ?", id))
+// GetTransaction returns one of the user's transactions.
+func (s *Store) GetTransaction(ctx context.Context, userID, id int64) (Transaction, error) {
+	t, err := scanTransaction(s.db.QueryRowContext(ctx, txSelect+" WHERE t.id = ? AND a.user_id = ?", id, userID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Transaction{}, ErrNotFound
 	}
@@ -94,13 +94,23 @@ func (s *Store) GetTransaction(ctx context.Context, id int64) (Transaction, erro
 	return t, nil
 }
 
-// CreateTransaction adds a top-up or an expense to an asset.
-func (s *Store) CreateTransaction(ctx context.Context, in NewTransaction) (Transaction, error) {
+// CreateTransaction adds a top-up or an expense to one of the user's assets.
+// The asset and the category must both belong to the user.
+func (s *Store) CreateTransaction(ctx context.Context, userID int64, in NewTransaction) (Transaction, error) {
+	var owned int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM assets WHERE id = ? AND user_id = ?`, in.AssetID, userID).Scan(&owned)
+	if err != nil {
+		return Transaction{}, fmt.Errorf("check asset: %w", err)
+	}
+	if owned == 0 {
+		return Transaction{}, ErrAssetNotFound
+	}
+
 	var category any
 	if in.Category != nil {
 		category = *in.Category
 		var catType string
-		err := s.db.QueryRowContext(ctx, `SELECT type FROM categories WHERE id = ?`, *in.Category).Scan(&catType)
+		err := s.db.QueryRowContext(ctx, `SELECT type FROM categories WHERE id = ? AND user_id = ?`, *in.Category, userID).Scan(&catType)
 		if errors.Is(err, sql.ErrNoRows) {
 			return Transaction{}, ErrCategoryNotFound
 		}
@@ -117,22 +127,19 @@ func (s *Store) CreateTransaction(ctx context.Context, in NewTransaction) (Trans
 		in.AssetID, in.Type, in.Amount, category, strings.TrimSpace(in.Comment),
 		ms(in.OccurredAt), ms(time.Now()))
 	if err != nil {
-		// The foreign key rejects transactions for a missing asset.
-		if strings.Contains(err.Error(), "FOREIGN KEY constraint failed") {
-			return Transaction{}, ErrAssetNotFound
-		}
 		return Transaction{}, fmt.Errorf("insert transaction: %w", err)
 	}
 	id, err := res.LastInsertId()
 	if err != nil {
 		return Transaction{}, err
 	}
-	return s.GetTransaction(ctx, id)
+	return s.GetTransaction(ctx, userID, id)
 }
 
-// DeleteTransaction deletes one transaction.
-func (s *Store) DeleteTransaction(ctx context.Context, id int64) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM transactions WHERE id = ?`, id)
+// DeleteTransaction deletes one of the user's transactions.
+func (s *Store) DeleteTransaction(ctx context.Context, userID, id int64) error {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM transactions WHERE id = ? AND asset_id IN (SELECT id FROM assets WHERE user_id = ?)`, id, userID)
 	if err != nil {
 		return fmt.Errorf("delete transaction: %w", err)
 	}

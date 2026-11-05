@@ -16,7 +16,7 @@ func (h *handler) summary(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	sum, err := h.store.Summary(r.Context(), rng)
+	sum, err := h.store.Summary(r.Context(), userID(r), rng)
 	if err != nil {
 		h.internal(w, r, err)
 		return
@@ -25,7 +25,7 @@ func (h *handler) summary(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) listAssets(w http.ResponseWriter, r *http.Request) {
-	assets, err := h.store.ListAssets(r.Context())
+	assets, err := h.store.ListAssets(r.Context(), userID(r))
 	if err != nil {
 		h.internal(w, r, err)
 		return
@@ -38,7 +38,7 @@ func (h *handler) getAsset(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	a, err := h.store.GetAsset(r.Context(), id)
+	a, err := h.store.GetAsset(r.Context(), userID(r), id)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "Актив не найден")
 		return
@@ -72,7 +72,7 @@ func (h *handler) createAsset(w http.ResponseWriter, r *http.Request) {
 		writeValidation(w, errs)
 		return
 	}
-	a, err := h.store.CreateAsset(r.Context(), in)
+	a, err := h.store.CreateAsset(r.Context(), userID(r), in)
 	if err != nil {
 		h.internal(w, r, err)
 		return
@@ -85,7 +85,7 @@ func (h *handler) deleteAsset(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	err := h.store.DeleteAsset(r.Context(), id)
+	err := h.store.DeleteAsset(r.Context(), userID(r), id)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "Актив не найден")
 		return
@@ -137,7 +137,7 @@ func (h *handler) listTransactions(w http.ResponseWriter, r *http.Request) {
 	}
 	f.Range = rng
 
-	list, err := h.store.ListTransactions(r.Context(), f)
+	list, err := h.store.ListTransactions(r.Context(), userID(r), f)
 	if err != nil {
 		h.internal(w, r, err)
 		return
@@ -174,7 +174,7 @@ func (h *handler) createTransaction(w http.ResponseWriter, r *http.Request) {
 		writeValidation(w, errs)
 		return
 	}
-	t, err := h.store.CreateTransaction(r.Context(), in)
+	t, err := h.store.CreateTransaction(r.Context(), userID(r), in)
 	switch {
 	case errors.Is(err, store.ErrAssetNotFound):
 		writeValidation(w, map[string]string{"asset_id": "Актив не найден"})
@@ -200,7 +200,7 @@ func (h *handler) deleteTransaction(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	err := h.store.DeleteTransaction(r.Context(), id)
+	err := h.store.DeleteTransaction(r.Context(), userID(r), id)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "Операция не найдена")
 		return
@@ -226,7 +226,7 @@ func (h *handler) categoryStats(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	stats, err := h.store.CategoryStats(r.Context(), rng, txType)
+	stats, err := h.store.CategoryStats(r.Context(), userID(r), rng, txType)
 	if err != nil {
 		h.internal(w, r, err)
 		return

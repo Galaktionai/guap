@@ -97,13 +97,13 @@ func scanCategory(row scanner) (Category, error) {
 	return c, err
 }
 
-// ListCategories returns categories of txType ("" for all): expense first,
+// ListCategories returns the user's categories of txType ("" for all): expense first,
 // each type in display order.
-func (s *Store) ListCategories(ctx context.Context, txType string) ([]Category, error) {
-	q := categorySelect
-	var args []any
+func (s *Store) ListCategories(ctx context.Context, userID int64, txType string) ([]Category, error) {
+	q := categorySelect + " WHERE c.user_id = ?"
+	args := []any{userID}
 	if txType != "" {
-		q += " WHERE c.type = ?"
+		q += " AND c.type = ?"
 		args = append(args, txType)
 	}
 	q += " ORDER BY CASE c.type WHEN 'expense' THEN 0 ELSE 1 END, c.position, c.created_at"
@@ -124,9 +124,9 @@ func (s *Store) ListCategories(ctx context.Context, txType string) ([]Category, 
 	return list, rows.Err()
 }
 
-// GetCategory returns one category.
-func (s *Store) GetCategory(ctx context.Context, id string) (Category, error) {
-	c, err := scanCategory(s.db.QueryRowContext(ctx, categorySelect+" WHERE c.id = ?", id))
+// GetCategory returns one of the user's categories.
+func (s *Store) GetCategory(ctx context.Context, userID int64, id string) (Category, error) {
+	c, err := scanCategory(s.db.QueryRowContext(ctx, categorySelect+" WHERE c.id = ? AND c.user_id = ?", id, userID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Category{}, ErrNotFound
 	}
@@ -136,11 +136,11 @@ func (s *Store) GetCategory(ctx context.Context, id string) (Category, error) {
 	return c, nil
 }
 
-// nameTaken reports whether another category of txType already has this
+// nameTaken reports whether another of the user's categories of txType has this
 // name, ignoring case. The comparison is done in Go because SQLite's lower()
 // only folds ASCII letters.
-func nameTaken(ctx context.Context, tx *sql.Tx, txType, name, exceptID string) (bool, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT id, name FROM categories WHERE type = ?`, txType)
+func nameTaken(ctx context.Context, tx *sql.Tx, userID int64, txType, name, exceptID string) (bool, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT id, name FROM categories WHERE user_id = ? AND type = ?`, userID, txType)
 	if err != nil {
 		return false, err
 	}
@@ -166,7 +166,7 @@ func newCategoryID() (string, error) {
 }
 
 // CreateCategory adds a category at the end of its type's list.
-func (s *Store) CreateCategory(ctx context.Context, txType string, in CategoryInput) (Category, error) {
+func (s *Store) CreateCategory(ctx context.Context, userID int64, txType string, in CategoryInput) (Category, error) {
 	id, err := newCategoryID()
 	if err != nil {
 		return Category{}, err
@@ -177,26 +177,26 @@ func (s *Store) CreateCategory(ctx context.Context, txType string, in CategoryIn
 	}
 	defer tx.Rollback() //nolint:errcheck // no-op after Commit
 
-	if taken, err := nameTaken(ctx, tx, txType, in.Name, ""); err != nil {
+	if taken, err := nameTaken(ctx, tx, userID, txType, in.Name, ""); err != nil {
 		return Category{}, err
 	} else if taken {
 		return Category{}, ErrDuplicateCategory
 	}
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO categories (id, type, name, icon, color, position, created_at)
-		VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM categories WHERE type = ?), ?)`,
-		id, txType, in.Name, in.Icon, in.Color, txType, ms(time.Now()))
+		INSERT INTO categories (id, user_id, type, name, icon, color, position, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM categories WHERE user_id = ? AND type = ?), ?)`,
+		id, userID, txType, in.Name, in.Icon, in.Color, userID, txType, ms(time.Now()))
 	if err != nil {
 		return Category{}, fmt.Errorf("insert category: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return Category{}, err
 	}
-	return s.GetCategory(ctx, id)
+	return s.GetCategory(ctx, userID, id)
 }
 
 // UpdateCategory changes a category's name, icon and color.
-func (s *Store) UpdateCategory(ctx context.Context, id string, in CategoryInput) (Category, error) {
+func (s *Store) UpdateCategory(ctx context.Context, userID int64, id string, in CategoryInput) (Category, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Category{}, err
@@ -204,38 +204,38 @@ func (s *Store) UpdateCategory(ctx context.Context, id string, in CategoryInput)
 	defer tx.Rollback() //nolint:errcheck // no-op after Commit
 
 	var txType string
-	err = tx.QueryRowContext(ctx, `SELECT type FROM categories WHERE id = ?`, id).Scan(&txType)
+	err = tx.QueryRowContext(ctx, `SELECT type FROM categories WHERE id = ? AND user_id = ?`, id, userID).Scan(&txType)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Category{}, ErrNotFound
 	}
 	if err != nil {
 		return Category{}, err
 	}
-	if taken, err := nameTaken(ctx, tx, txType, in.Name, id); err != nil {
+	if taken, err := nameTaken(ctx, tx, userID, txType, in.Name, id); err != nil {
 		return Category{}, err
 	} else if taken {
 		return Category{}, ErrDuplicateCategory
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE categories SET name = ?, icon = ?, color = ? WHERE id = ?`,
-		in.Name, in.Icon, in.Color, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE categories SET name = ?, icon = ?, color = ? WHERE id = ? AND user_id = ?`,
+		in.Name, in.Icon, in.Color, id, userID); err != nil {
 		return Category{}, fmt.Errorf("update category: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return Category{}, err
 	}
-	return s.GetCategory(ctx, id)
+	return s.GetCategory(ctx, userID, id)
 }
 
 // DeleteCategory deletes a category. Its transactions are kept and become
 // uncategorized.
-func (s *Store) DeleteCategory(ctx context.Context, id string) error {
+func (s *Store) DeleteCategory(ctx context.Context, userID int64, id string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback() //nolint:errcheck // no-op after Commit
 
-	res, err := tx.ExecContext(ctx, `DELETE FROM categories WHERE id = ?`, id)
+	res, err := tx.ExecContext(ctx, `DELETE FROM categories WHERE id = ? AND user_id = ?`, id, userID)
 	if err != nil {
 		return fmt.Errorf("delete category: %w", err)
 	}

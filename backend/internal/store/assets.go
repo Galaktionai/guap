@@ -27,9 +27,10 @@ func scanAsset(row scanner) (Asset, error) {
 	return a, nil
 }
 
-// ListAssets returns all assets with their balances, oldest first.
-func (s *Store) ListAssets(ctx context.Context) ([]Asset, error) {
-	rows, err := s.db.QueryContext(ctx, assetSelect+` GROUP BY a.id ORDER BY a.created_at, a.id`)
+// ListAssets returns the user's assets with their balances, oldest first.
+func (s *Store) ListAssets(ctx context.Context, userID int64) ([]Asset, error) {
+	rows, err := s.db.QueryContext(ctx,
+		assetSelect+` WHERE a.user_id = ? GROUP BY a.id ORDER BY a.created_at, a.id`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list assets: %w", err)
 	}
@@ -46,9 +47,10 @@ func (s *Store) ListAssets(ctx context.Context) ([]Asset, error) {
 	return assets, rows.Err()
 }
 
-// GetAsset returns one asset with its balance.
-func (s *Store) GetAsset(ctx context.Context, id int64) (Asset, error) {
-	a, err := scanAsset(s.db.QueryRowContext(ctx, assetSelect+` WHERE a.id = ? GROUP BY a.id`, id))
+// GetAsset returns one of the user's assets with its balance.
+func (s *Store) GetAsset(ctx context.Context, userID, id int64) (Asset, error) {
+	a, err := scanAsset(s.db.QueryRowContext(ctx,
+		assetSelect+` WHERE a.id = ? AND a.user_id = ? GROUP BY a.id`, id, userID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Asset{}, ErrNotFound
 	}
@@ -60,7 +62,7 @@ func (s *Store) GetAsset(ctx context.Context, id int64) (Asset, error) {
 
 // CreateAsset creates an asset. A positive initial balance is recorded as an
 // opening income transaction so that it shows up in the history.
-func (s *Store) CreateAsset(ctx context.Context, in NewAsset) (Asset, error) {
+func (s *Store) CreateAsset(ctx context.Context, userID int64, in NewAsset) (Asset, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Asset{}, err
@@ -69,8 +71,8 @@ func (s *Store) CreateAsset(ctx context.Context, in NewAsset) (Asset, error) {
 
 	now := ms(time.Now())
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO assets (name, icon, color, created_at) VALUES (?, ?, ?, ?)`,
-		in.Name, in.Icon, in.Color, now)
+		`INSERT INTO assets (user_id, name, icon, color, created_at) VALUES (?, ?, ?, ?, ?)`,
+		userID, in.Name, in.Icon, in.Color, now)
 	if err != nil {
 		return Asset{}, fmt.Errorf("insert asset: %w", err)
 	}
@@ -92,12 +94,12 @@ func (s *Store) CreateAsset(ctx context.Context, in NewAsset) (Asset, error) {
 	if err := tx.Commit(); err != nil {
 		return Asset{}, err
 	}
-	return s.GetAsset(ctx, id)
+	return s.GetAsset(ctx, userID, id)
 }
 
-// DeleteAsset deletes an asset together with all its transactions.
-func (s *Store) DeleteAsset(ctx context.Context, id int64) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM assets WHERE id = ?`, id)
+// DeleteAsset deletes one of the user's assets together with its transactions.
+func (s *Store) DeleteAsset(ctx context.Context, userID, id int64) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM assets WHERE id = ? AND user_id = ?`, id, userID)
 	if err != nil {
 		return fmt.Errorf("delete asset: %w", err)
 	}

@@ -51,6 +51,10 @@ export type Category = {
 /** What the user can change; the type is set once, on create. */
 export type CategoryInput = { name: string; icon: string; color: string };
 
+export type User = { id: number; email: string; created_at: string };
+
+export type AuthResponse = { token: string; user: User };
+
 export type Range = { from?: string; to?: string };
 
 export type NewAsset = { name: string; icon: AssetIcon; color: AssetColor; initial_balance: number };
@@ -102,12 +106,30 @@ function query(params: Record<string, string | number | undefined>): string {
   return parts.length ? `?${parts.join('&')}` : '';
 }
 
+// The session token is kept here by the auth provider (src/auth.tsx) and
+// sent with every request.
+let sessionToken: string | null = null;
+let onSessionExpired: (() => void) | null = null;
+
+export function setSessionToken(token: string | null) {
+  sessionToken = token;
+}
+
+/** Called when the server rejects the token, so the app can sign out. */
+export function setOnSessionExpired(fn: (() => void) | null) {
+  onSessionExpired = fn;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
     res = await fetch(API_URL + path, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...init.headers },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+        ...init.headers,
+      },
     });
   } catch {
     throw new ApiError(0, `Нет связи с сервером (${API_URL})`);
@@ -115,12 +137,20 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (res.status === 204) return undefined as T;
   const body = await res.json().catch(() => null);
   if (!res.ok) {
+    if (res.status === 401 && sessionToken && !path.startsWith('/api/auth/login')) onSessionExpired?.();
     throw new ApiError(res.status, body?.error ?? `Ошибка сервера (${res.status})`, body?.fields ?? {});
   }
   return body as T;
 }
 
 export const api = {
+  register: (email: string, password: string) =>
+    request<AuthResponse>('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  login: (email: string, password: string) =>
+    request<AuthResponse>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
+  me: () => request<User>('/api/auth/me'),
+
   summary: (r: Range) => request<Summary>(`/api/summary${query(r)}`),
   categoryStats: (r: Range, type: TxType) => request<CategoryStats>(`/api/stats/categories${query({ ...r, type })}`),
 

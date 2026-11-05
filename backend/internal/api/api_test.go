@@ -17,11 +17,12 @@ import (
 )
 
 type client struct {
-	t   *testing.T
-	srv *httptest.Server
+	t     *testing.T
+	srv   *httptest.Server
+	token string
 }
 
-func newClient(t *testing.T) *client {
+func newServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	st, err := store.Open(context.Background(), ":memory:")
 	if err != nil {
@@ -30,7 +31,27 @@ func newClient(t *testing.T) *client {
 	t.Cleanup(func() { st.Close() })
 	srv := httptest.NewServer(api.New(st, slog.New(slog.NewTextHandler(io.Discard, nil))))
 	t.Cleanup(srv.Close)
-	return &client{t: t, srv: srv}
+	return srv
+}
+
+// newClient starts a fresh server and registers a user on it.
+func newClient(t *testing.T) *client {
+	t.Helper()
+	return signUp(t, newServer(t), "user@example.com")
+}
+
+// signUp registers email on srv and returns a client signed in as that user.
+func signUp(t *testing.T, srv *httptest.Server, email string) *client {
+	t.Helper()
+	c := &client{t: t, srv: srv}
+	var res struct {
+		Token string `json:"token"`
+	}
+	if st := c.do("POST", "/api/auth/register", map[string]any{"email": email, "password": "correct horse"}, &res); st != http.StatusCreated {
+		t.Fatalf("register %s: status %d", email, st)
+	}
+	c.token = res.Token
+	return c
 }
 
 // do sends a request and decodes the JSON response into out (if non-nil).
@@ -43,6 +64,9 @@ func (c *client) do(method, path string, body any, out any) int {
 	}
 	req, _ := http.NewRequest(method, c.srv.URL+path, r)
 	req.Header.Set("Content-Type", "application/json")
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		c.t.Fatalf("%s %s: %v", method, path, err)

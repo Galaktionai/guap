@@ -15,7 +15,7 @@ func (h *handler) listCategories(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Параметр type должен быть income или expense")
 		return
 	}
-	list, err := h.store.ListCategories(r.Context(), txType)
+	list, err := h.store.ListCategories(r.Context(), userID(r), txType)
 	if err != nil {
 		h.internal(w, r, err)
 		return
@@ -51,7 +51,7 @@ func (h *handler) createCategory(w http.ResponseWriter, r *http.Request) {
 		writeValidation(w, errs)
 		return
 	}
-	c, err := h.store.CreateCategory(r.Context(), req.Type, in)
+	c, err := h.store.CreateCategory(r.Context(), userID(r), req.Type, in)
 	if h.categoryError(w, r, err) {
 		return
 	}
@@ -71,7 +71,7 @@ func (h *handler) updateCategory(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if req.Type != "" {
 		// Silently ignoring a new type would be surprising; reject it instead.
-		cur, err := h.store.GetCategory(r.Context(), id)
+		cur, err := h.store.GetCategory(r.Context(), userID(r), id)
 		if h.categoryError(w, r, err) {
 			return
 		}
@@ -80,7 +80,7 @@ func (h *handler) updateCategory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	c, err := h.store.UpdateCategory(r.Context(), id, in)
+	c, err := h.store.UpdateCategory(r.Context(), userID(r), id, in)
 	if h.categoryError(w, r, err) {
 		return
 	}
@@ -88,7 +88,7 @@ func (h *handler) updateCategory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) deleteCategory(w http.ResponseWriter, r *http.Request) {
-	err := h.store.DeleteCategory(r.Context(), r.PathValue("id"))
+	err := h.store.DeleteCategory(r.Context(), userID(r), r.PathValue("id"))
 	if h.categoryError(w, r, err) {
 		return
 	}

@@ -85,7 +85,10 @@ export default function HomeScreen() {
           </T>
           <T variant="titleLarge">Мои финансы</T>
         </View>
-        <IconButton icon="tags" accessibilityLabel="Категории" onPress={() => router.push('/categories')} />
+        <View style={styles.headerActions}>
+          <IconButton icon="tags" accessibilityLabel="Категории" onPress={() => router.push('/categories')} />
+          <IconButton icon="user" accessibilityLabel="Аккаунт" onPress={() => router.push('/account')} />
+        </View>
       </View>
       {body}
     </SafeAreaView>
@@ -125,6 +128,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: space.md,
   },
+  headerActions: { flexDirection: 'row', gap: space.sm },
   content: { padding: space.lg, paddingTop: space.md, gap: space.xxl, paddingBottom: space.xxxl },
   hero: {
     backgroundColor: colors.accent,

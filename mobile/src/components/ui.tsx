@@ -2,6 +2,7 @@ import { type ReactNode, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   type StyleProp,
   StyleSheet,
@@ -361,11 +362,28 @@ function DeleteAction({ progress, onPress }: { progress: SharedValue<number>; on
   );
 }
 
-export function confirmDelete(title: string, message: string | undefined, onConfirm: () => void, onCancel?: () => void) {
-  Alert.alert(title, message, [
-    { text: 'Отмена', style: 'cancel', onPress: onCancel },
-    { text: 'Удалить', style: 'destructive', onPress: onConfirm },
+/** Asks to confirm a destructive action: a native alert, or confirm() on the web build. */
+export function confirmAction(opts: {
+  title: string;
+  message?: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+  onCancel?: () => void;
+}) {
+  if (Platform.OS === 'web') {
+    // react-native-web has no Alert implementation.
+    if (window.confirm([opts.title, opts.message].filter(Boolean).join('\n\n'))) opts.onConfirm();
+    else opts.onCancel?.();
+    return;
+  }
+  Alert.alert(opts.title, opts.message, [
+    { text: 'Отмена', style: 'cancel', onPress: opts.onCancel },
+    { text: opts.confirmLabel, style: 'destructive', onPress: opts.onConfirm },
   ]);
+}
+
+export function confirmDelete(title: string, message: string | undefined, onConfirm: () => void, onCancel?: () => void) {
+  confirmAction({ title, message, confirmLabel: 'Удалить', onConfirm, onCancel });
 }
 
 // ---------- States ----------

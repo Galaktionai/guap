@@ -22,6 +22,8 @@ var (
 	ErrCategoryType = errors.New("category type does not match transaction type")
 	// ErrDuplicateCategory is returned when a category name is already taken for that type.
 	ErrDuplicateCategory = errors.New("duplicate category name")
+	// ErrEmailTaken is returned when registering an email that already has an account.
+	ErrEmailTaken = errors.New("email already registered")
 )
 
 // Store is the data access layer.
@@ -111,6 +113,31 @@ var migrations = []func(ctx context.Context, tx *sql.Tx) error{
 			}
 		}
 		return nil
+	},
+	// 3: user accounts. Data created before accounts existed has no owner
+	// (user_id NULL); the first user to register takes it over.
+	func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			CREATE TABLE users (
+				id            INTEGER PRIMARY KEY AUTOINCREMENT,
+				email         TEXT    NOT NULL UNIQUE,
+				password_hash TEXT    NOT NULL,
+				created_at    INTEGER NOT NULL
+			);
+
+			CREATE TABLE sessions (
+				token_hash TEXT    PRIMARY KEY,
+				user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+				created_at INTEGER NOT NULL,
+				expires_at INTEGER NOT NULL
+			);
+			CREATE INDEX idx_sessions_user ON sessions(user_id);
+
+			ALTER TABLE assets ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
+			ALTER TABLE categories ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
+			CREATE INDEX idx_assets_user ON assets(user_id);
+			CREATE INDEX idx_categories_user ON categories(user_id, type, position);`)
+		return err
 	},
 }
 
