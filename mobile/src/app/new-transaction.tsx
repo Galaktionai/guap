@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ApiError, type TxType } from '@/api';
-import { CATEGORIES, type CategoryId } from '@/categories';
+import { categoriesFor, type CategoryId } from '@/categories';
 import { Icon } from '@/components/Icon';
 import { inputStyle, Sheet } from '@/components/Sheet';
 import {
@@ -31,7 +31,11 @@ export default function NewTransactionSheet() {
 
   const [type, setType] = useState<TxType>(params.type === 'income' ? 'income' : 'expense');
   const [amountRaw, setAmountRaw] = useState('');
-  const [category, setCategory] = useState<CategoryId | null>(null);
+  // Expense and income have separate category lists; each keeps its own choice.
+  const [categoryByType, setCategoryByType] = useState<Record<TxType, CategoryId | null>>({
+    expense: null,
+    income: null,
+  });
   const [assetId, setAssetId] = useState<number | null>(params.assetId ? Number(params.assetId) : null);
   const [assetListOpen, setAssetListOpen] = useState(false);
   const [comment, setComment] = useState('');
@@ -53,17 +57,18 @@ export default function NewTransactionSheet() {
   const list = assets.data ?? [];
   const selectedAsset = list.find((a) => a.id === assetId) ?? list[0];
   const amount = parseAmount(amountRaw);
-  const canSave = amount !== null && (type === 'income' || category !== null);
+  const category = categoryByType[type];
+  const canSave = amount !== null && category !== null;
   const fields = create.error instanceof ApiError ? create.error.fields : {};
 
   const save = () => {
-    if (!canSave || amount === null) return;
+    if (!canSave || amount === null || category === null) return;
     create.mutate(
       {
         asset_id: selectedAsset.id,
         type,
         amount,
-        category: type === 'expense' ? category : null,
+        category,
         comment: comment.trim(),
         occurred_at: date.toISOString(),
       },
@@ -132,44 +137,43 @@ export default function NewTransactionSheet() {
         <FieldError message={fields.amount} />
       </View>
 
-      {type === 'expense' && (
-        <View>
-          <FieldLabel>Категория</FieldLabel>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.chips}
-          >
-            {CATEGORIES.map((c) => {
-              const selected = c.id === category;
-              return (
-                <Pressable
-                  key={c.id}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected }}
-                  accessibilityLabel={c.name}
-                  onPress={() => setCategory(c.id)}
-                  style={styles.chip}
+      <View>
+        <FieldLabel>{type === 'expense' ? 'Категория расхода' : 'Источник пополнения'}</FieldLabel>
+        <ScrollView
+          key={type}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.chips}
+        >
+          {categoriesFor(type).map((c) => {
+            const selected = c.id === category;
+            return (
+              <Pressable
+                key={c.id}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                accessibilityLabel={c.name}
+                onPress={() => setCategoryByType((prev) => ({ ...prev, [type]: c.id }))}
+                style={styles.chip}
+              >
+                <View style={[styles.ring, selected && { borderColor: colors.accent }]}>
+                  <CategoryBadge category={c} size={52} />
+                </View>
+                <T
+                  variant="caption"
+                  color={selected ? colors.textPrimary : colors.textSecondary}
+                  numberOfLines={1}
+                  style={selected && { fontWeight: '600' }}
                 >
-                  <View style={[styles.ring, selected && { borderColor: colors.accent }]}>
-                    <CategoryBadge category={c} size={52} />
-                  </View>
-                  <T
-                    variant="caption"
-                    color={selected ? colors.textPrimary : colors.textSecondary}
-                    numberOfLines={1}
-                    style={selected && { fontWeight: '600' }}
-                  >
-                    {c.name}
-                  </T>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          <FieldError message={fields.category} />
-        </View>
-      )}
+                  {c.name}
+                </T>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+        <FieldError message={fields.category} />
+      </View>
 
       <View>
         <FieldLabel>Актив</FieldLabel>
@@ -217,7 +221,7 @@ export default function NewTransactionSheet() {
         <TextInput
           value={comment}
           onChangeText={setComment}
-          placeholder={type === 'expense' ? 'Например, «на неделю»' : 'Например, «зарплата»'}
+          placeholder={type === 'expense' ? 'Например, «на неделю»' : 'Например, «аванс за ноябрь»'}
           placeholderTextColor={colors.textTertiary}
           maxLength={200}
           returnKeyType="done"

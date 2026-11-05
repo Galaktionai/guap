@@ -1,17 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { api, type NewAsset, type NewTransaction, type Range, type TransactionQuery } from './api';
+import { api, type NewAsset, type NewTransaction, type Range, type TransactionQuery, type TxType } from './api';
 
 export const keys = {
   summary: (r: Range) => ['summary', r] as const,
-  stats: (r: Range) => ['stats', r] as const,
+  stats: (r: Range, type: TxType) => ['stats', type, r] as const,
   assets: ['assets'] as const,
   asset: (id: number) => ['assets', id] as const,
   transactions: (q: TransactionQuery) => ['transactions', q] as const,
 };
 
 export const useSummary = (r: Range) => useQuery({ queryKey: keys.summary(r), queryFn: () => api.summary(r) });
-export const useCategoryStats = (r: Range) => useQuery({ queryKey: keys.stats(r), queryFn: () => api.categoryStats(r) });
+export const useCategoryStats = (r: Range, type: TxType) =>
+  useQuery({ queryKey: keys.stats(r, type), queryFn: () => api.categoryStats(r, type) });
 export const useAssets = () => useQuery({ queryKey: keys.assets, queryFn: api.assets });
 export const useAsset = (id: number) => useQuery({ queryKey: keys.asset(id), queryFn: () => api.asset(id) });
 export const useTransactions = (q: TransactionQuery) =>

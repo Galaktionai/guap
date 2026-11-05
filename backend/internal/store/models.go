@@ -97,13 +97,13 @@ func (t NewTransaction) Validate() map[string]string {
 		errs["asset_id"] = "Выберите актив"
 	}
 	switch t.Type {
-	case TypeExpense:
-		if t.Category == nil || !IsCategory(*t.Category) {
+	case TypeExpense, TypeIncome:
+		if t.Category == nil {
 			errs["category"] = "Выберите категорию"
-		}
-	case TypeIncome:
-		if t.Category != nil {
-			errs["category"] = "У пополнения нет категории"
+		} else if c, ok := FindCategory(*t.Category); !ok {
+			errs["category"] = "Неизвестная категория"
+		} else if c.Type != t.Type {
+			errs["category"] = "Эта категория не подходит для " + map[string]string{TypeIncome: "пополнения", TypeExpense: "расхода"}[t.Type]
 		}
 	default:
 		errs["type"] = "Тип должен быть income или expense"
@@ -123,29 +123,50 @@ func (t NewTransaction) Validate() map[string]string {
 	return errs
 }
 
-// Category is an expense category.
+// Category is an expense or income category. Expense and income categories
+// are separate lists; ids are unique across both.
 type Category struct {
 	ID    string `json:"id"`
+	Type  string `json:"type"`
 	Name  string `json:"name"`
 	Icon  string `json:"icon"`
 	Color string `json:"color"`
 }
 
-// Categories is the fixed list of expense categories, in display order.
+// Categories lists expense categories, then income ones, in display order.
 var Categories = []Category{
-	{ID: "groceries", Name: "Продукты", Icon: "shopping-cart", Color: "orange"},
-	{ID: "cafe", Name: "Кафе", Icon: "coffee", Color: "yellow"},
-	{ID: "transport", Name: "Транспорт", Icon: "car", Color: "blue"},
-	{ID: "home", Name: "Дом", Icon: "house", Color: "teal"},
-	{ID: "health", Name: "Здоровье", Icon: "heart-pulse", Color: "red"},
-	{ID: "entertainment", Name: "Развлечения", Icon: "gamepad", Color: "purple"},
-	{ID: "clothes", Name: "Одежда", Icon: "shirt", Color: "pink"},
-	{ID: "connection", Name: "Связь", Icon: "smartphone", Color: "indigo"},
-	{ID: "gifts", Name: "Подарки", Icon: "gift", Color: "green"},
-	{ID: "other", Name: "Другое", Icon: "more-horizontal", Color: "gray"},
+	{ID: "groceries", Type: TypeExpense, Name: "Продукты", Icon: "shopping-cart", Color: "orange"},
+	{ID: "cafe", Type: TypeExpense, Name: "Кафе", Icon: "coffee", Color: "yellow"},
+	{ID: "transport", Type: TypeExpense, Name: "Транспорт", Icon: "car", Color: "blue"},
+	{ID: "home", Type: TypeExpense, Name: "Дом", Icon: "house", Color: "teal"},
+	{ID: "health", Type: TypeExpense, Name: "Здоровье", Icon: "heart-pulse", Color: "red"},
+	{ID: "entertainment", Type: TypeExpense, Name: "Развлечения", Icon: "gamepad", Color: "purple"},
+	{ID: "clothes", Type: TypeExpense, Name: "Одежда", Icon: "shirt", Color: "pink"},
+	{ID: "connection", Type: TypeExpense, Name: "Связь", Icon: "smartphone", Color: "indigo"},
+	{ID: "gifts", Type: TypeExpense, Name: "Подарки", Icon: "gift", Color: "green"},
+	{ID: "other", Type: TypeExpense, Name: "Другое", Icon: "more-horizontal", Color: "gray"},
+
+	{ID: "salary", Type: TypeIncome, Name: "Зарплата", Icon: "briefcase", Color: "green"},
+	{ID: "side_job", Type: TypeIncome, Name: "Подработка", Icon: "laptop", Color: "blue"},
+	{ID: "transfer_in", Type: TypeIncome, Name: "Перевод", Icon: "arrow-left-right", Color: "teal"},
+	{ID: "cashback", Type: TypeIncome, Name: "Кэшбэк", Icon: "percent", Color: "orange"},
+	{ID: "interest", Type: TypeIncome, Name: "Проценты", Icon: "trending-up", Color: "indigo"},
+	{ID: "gift_in", Type: TypeIncome, Name: "Подарок", Icon: "gift", Color: "pink"},
+	{ID: "refund", Type: TypeIncome, Name: "Возврат", Icon: "rotate-ccw", Color: "yellow"},
+	{ID: "other_income", Type: TypeIncome, Name: "Другое", Icon: "more-horizontal", Color: "gray"},
 }
 
-// IsCategory reports whether id is a known category.
+// FindCategory returns the category with the given id.
+func FindCategory(id string) (Category, bool) {
+	i := slices.IndexFunc(Categories, func(c Category) bool { return c.ID == id })
+	if i < 0 {
+		return Category{}, false
+	}
+	return Categories[i], true
+}
+
+// IsCategory reports whether id is a known category of either type.
 func IsCategory(id string) bool {
-	return slices.ContainsFunc(Categories, func(c Category) bool { return c.ID == id })
+	_, ok := FindCategory(id)
+	return ok
 }

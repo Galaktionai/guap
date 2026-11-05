@@ -1,6 +1,6 @@
 # Трекер финансов
 
-Мобильное приложение для учёта денег: активы (карты, наличные, накопления), пополнения и расходы по категориям, общий бюджет и история.
+Мобильное приложение для учёта денег: активы (карты, наличные, накопления), пополнения и расходы — у каждого типа свой набор категорий, — общий бюджет, история и разбивка по категориям.
 
 - `backend/` — API на Go, данные в SQLite (без внешних сервисов).
 - `mobile/` — приложение на React Native (Expo, Expo Router).
@@ -50,9 +50,9 @@ cd mobile && npx tsc --noEmit
 | GET | `/api/assets/{id}` | Один актив |
 | DELETE | `/api/assets/{id}` | Удалить актив вместе с его операциями |
 | GET | `/api/transactions?asset_id=&type=&category=&from=&to=&limit=&offset=` | История, новые сверху |
-| POST | `/api/transactions` | Добавить операцию: `asset_id`, `type` (`income`/`expense`), `amount`, `category` (только для расходов), `comment`, `occurred_at` |
+| POST | `/api/transactions` | Добавить операцию: `asset_id`, `type` (`income`/`expense`), `amount`, `category` (обязательна; категория того же типа, что и операция), `comment`, `occurred_at` |
 | DELETE | `/api/transactions/{id}` | Удалить операцию |
-| GET | `/api/stats/categories?from=&to=` | Расходы по категориям за период |
-| GET | `/api/categories` | Список категорий |
+| GET | `/api/stats/categories?type=expense\|income&from=&to=` | Расходы или пополнения по категориям за период (по умолчанию расходы) |
+| GET | `/api/categories` | Категории расходов и пополнений (поле `type`) |
 
 Начальный баланс актива записывается в историю как пополнение с `is_initial: true`; в сумму пополнений за месяц он не входит.

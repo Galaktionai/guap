@@ -91,7 +91,7 @@ func TestAssetLifecycle(t *testing.T) {
 	if _, st := c.createTx(map[string]any{"asset_id": a.ID, "type": "expense", "amount": 2_340_00, "category": food, "comment": "На неделю"}); st != http.StatusCreated {
 		t.Fatalf("expense: status %d", st)
 	}
-	if _, st := c.createTx(map[string]any{"asset_id": a.ID, "type": "income", "amount": 95_000_00}); st != http.StatusCreated {
+	if _, st := c.createTx(map[string]any{"asset_id": a.ID, "type": "income", "amount": 95_000_00, "category": "salary"}); st != http.StatusCreated {
 		t.Fatalf("income: status %d", st)
 	}
 
@@ -157,10 +157,12 @@ func TestValidation(t *testing.T) {
 	}{
 		{"expense without category", map[string]any{"asset_id": a.ID, "type": "expense", "amount": 100}, "category"},
 		{"unknown category", map[string]any{"asset_id": a.ID, "type": "expense", "amount": 100, "category": "yachts"}, "category"},
-		{"income with category", map[string]any{"asset_id": a.ID, "type": "income", "amount": 100, "category": "cafe"}, "category"},
+		{"income with expense category", map[string]any{"asset_id": a.ID, "type": "income", "amount": 100, "category": "cafe"}, "category"},
+		{"expense with income category", map[string]any{"asset_id": a.ID, "type": "expense", "amount": 100, "category": "salary"}, "category"},
+		{"income without category", map[string]any{"asset_id": a.ID, "type": "income", "amount": 100}, "category"},
 		{"zero amount", map[string]any{"asset_id": a.ID, "type": "income", "amount": 0}, "amount"},
 		{"bad type", map[string]any{"asset_id": a.ID, "type": "transfer", "amount": 100}, "type"},
-		{"missing asset", map[string]any{"asset_id": 999, "type": "income", "amount": 100}, "asset_id"},
+		{"missing asset", map[string]any{"asset_id": 999, "type": "income", "amount": 100, "category": "salary"}, "asset_id"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -202,7 +204,8 @@ func TestSummaryAndCategoryStats(t *testing.T) {
 		{"asset_id": card.ID, "type": "expense", "amount": 3_000_00, "category": "groceries", "occurred_at": nov},
 		{"asset_id": cash.ID, "type": "expense", "amount": 1_000_00, "category": "groceries", "occurred_at": nov},
 		{"asset_id": card.ID, "type": "expense", "amount": 2_500_00, "category": "transport", "occurred_at": nov},
-		{"asset_id": card.ID, "type": "income", "amount": 20_000_00, "occurred_at": nov},
+		{"asset_id": card.ID, "type": "income", "amount": 20_000_00, "category": "salary", "occurred_at": nov},
+		{"asset_id": cash.ID, "type": "income", "amount": 500_00, "category": "cashback", "occurred_at": nov},
 		{"asset_id": card.ID, "type": "expense", "amount": 9_999_00, "category": "home", "occurred_at": oct},
 	} {
 		if _, st := c.createTx(tx); st != http.StatusCreated {
@@ -214,13 +217,13 @@ func TestSummaryAndCategoryStats(t *testing.T) {
 
 	var sum store.Summary
 	c.do("GET", "/api/summary"+q, nil, &sum)
-	wantTotal := int64(50_000_00 + 10_000_00 - 3_000_00 - 1_000_00 - 2_500_00 + 20_000_00 - 9_999_00)
+	wantTotal := int64(50_000_00 + 10_000_00 - 3_000_00 - 1_000_00 - 2_500_00 + 20_000_00 + 500_00 - 9_999_00)
 	if sum.TotalBalance != wantTotal || sum.AssetsCount != 2 {
 		t.Fatalf("summary total=%d assets=%d, want %d and 2", sum.TotalBalance, sum.AssetsCount, wantTotal)
 	}
 	// Opening balances are not income; October expenses are out of range.
-	if sum.Income != 20_000_00 || sum.Expense != 6_500_00 {
-		t.Fatalf("november income=%d expense=%d, want 2000000 and 650000", sum.Income, sum.Expense)
+	if sum.Income != 20_500_00 || sum.Expense != 6_500_00 {
+		t.Fatalf("november income=%d expense=%d, want 2050000 and 650000", sum.Income, sum.Expense)
 	}
 
 	var stats store.CategoryStats
@@ -230,6 +233,16 @@ func TestSummaryAndCategoryStats(t *testing.T) {
 	}
 	if stats.Items[0].Category != "groceries" || stats.Items[0].Amount != 4_000_00 {
 		t.Fatalf("largest category = %+v, want groceries 400000", stats.Items[0])
+	}
+
+	// Income breakdown: opening balances are not income.
+	var income store.CategoryStats
+	c.do("GET", "/api/stats/categories"+q+"&type=income", nil, &income)
+	if income.Total != 20_500_00 || len(income.Items) != 2 || income.Items[0].Category != "salary" {
+		t.Fatalf("income stats = %+v, want salary 2000000 + cashback 50000", income)
+	}
+	if st := c.do("GET", "/api/stats/categories?type=transfer", nil, nil); st != http.StatusBadRequest {
+		t.Fatalf("bad stats type: status %d, want 400", st)
 	}
 
 	if st := c.do("GET", "/api/summary?from=yesterday", nil, nil); st != http.StatusBadRequest {

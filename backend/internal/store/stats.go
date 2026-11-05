@@ -46,19 +46,27 @@ type CategoryTotal struct {
 	Amount   int64  `json:"amount"`
 }
 
-// CategoryStats is the expense breakdown for a period, largest first.
+// CategoryStats is the breakdown of expenses or income for a period,
+// largest first.
 type CategoryStats struct {
 	Total int64           `json:"total"`
 	Items []CategoryTotal `json:"items"`
 }
 
-// CategoryStats sums expenses within r by category.
-func (s *Store) CategoryStats(ctx context.Context, r Range) (CategoryStats, error) {
-	rangeSQL, args := r.where("occurred_at")
+// CategoryStats sums transactions of type txType (TypeExpense or TypeIncome)
+// within r by category. Opening balances are not income and are left out;
+// income recorded before income categories existed counts as "other_income".
+func (s *Store) CategoryStats(ctx context.Context, r Range, txType string) (CategoryStats, error) {
+	fallback := "other"
+	if txType == TypeIncome {
+		fallback = "other_income"
+	}
+	rangeSQL, rangeArgs := r.where("occurred_at")
+	args := append([]any{fallback, txType}, rangeArgs...)
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT COALESCE(category, 'other'), SUM(amount)
+		SELECT COALESCE(category, ?), SUM(amount)
 		FROM transactions
-		WHERE type = 'expense'`+rangeSQL+`
+		WHERE type = ? AND is_initial = 0`+rangeSQL+`
 		GROUP BY 1
 		ORDER BY 2 DESC, 1`, args...)
 	if err != nil {

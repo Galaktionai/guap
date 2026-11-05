@@ -110,7 +110,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const api = {
   summary: (r: Range) => request<Summary>(`/api/summary${query(r)}`),
-  categoryStats: (r: Range) => request<CategoryStats>(`/api/stats/categories${query(r)}`),
+  categoryStats: (r: Range, type: TxType) => request<CategoryStats>(`/api/stats/categories${query({ ...r, type })}`),
 
   assets: () => request<Asset[]>('/api/assets'),
   asset: (id: number) => request<Asset>(`/api/assets/${id}`),

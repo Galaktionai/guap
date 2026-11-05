@@ -47,7 +47,11 @@ export default function HomeScreen() {
             </T>
           </View>
           <View style={styles.stats}>
-            <HeroStat kind="income" amount={s.income} onPress={() => router.push('/history')} />
+            <HeroStat
+              kind="income"
+              amount={s.income}
+              onPress={() => router.push({ pathname: '/stats', params: { type: 'income' } })}
+            />
             <HeroStat kind="expense" amount={s.expense} onPress={() => router.push('/stats')} />
           </View>
         </View>

@@ -154,7 +154,8 @@ export function CategoryBadge({ category, size = 40 }: { category: CategoryMeta;
 }
 
 function TransactionBadge({ tx }: { tx: Transaction }) {
-  if (tx.type === 'expense') return <CategoryBadge category={categoryMeta(tx.category)} />;
+  if (tx.category || tx.type === 'expense') return <CategoryBadge category={categoryMeta(tx.category, tx.type)} />;
+  // Opening balances (and income saved before income categories existed).
   return (
     <View style={[styles.round40, { backgroundColor: colors.incomeSoft }]}>
       <Icon name="arrow-down-left" size={20} color={colors.income} />
@@ -274,8 +275,13 @@ export function AssetRow({ asset, onPress }: { asset: Asset; onPress?: () => voi
 
 export function transactionTitle(tx: Transaction): string {
   if (tx.is_initial) return 'Начальный баланс';
-  if (tx.type === 'expense') return categoryMeta(tx.category).name;
+  if (tx.category || tx.type === 'expense') return categoryMeta(tx.category, tx.type).name;
   return tx.comment || 'Пополнение';
+}
+
+/** True when the title is the category name, so the comment goes into the subtitle. */
+function titleIsCategory(tx: Transaction): boolean {
+  return !tx.is_initial && (tx.category !== null || tx.type === 'expense');
 }
 
 /**
@@ -284,7 +290,7 @@ export function transactionTitle(tx: Transaction): string {
  */
 export function TransactionRow({ tx, context }: { tx: Transaction; context: 'asset' | 'history' }) {
   const time = timeLabel(new Date(tx.occurred_at));
-  const comment = tx.type === 'expense' && !tx.is_initial ? tx.comment : '';
+  const comment = titleIsCategory(tx) ? tx.comment : '';
   const parts = context === 'history' ? [comment, tx.asset_name, time] : [comment, time];
   return (
     <View style={styles.txRow}>

@@ -1,7 +1,9 @@
 import {
   ArrowDownLeft,
+  ArrowLeftRight,
   ArrowUpRight,
   Banknote,
+  Briefcase,
   Calendar,
   Car,
   Check,
@@ -15,10 +17,13 @@ import {
   HeartPulse,
   History,
   House,
+  Laptop,
   type LucideIcon,
   Minus,
+  Percent,
   PiggyBank,
   Plus,
+  RotateCcw,
   Shirt,
   ShoppingCart,
   Smartphone,
@@ -58,6 +63,11 @@ const ICONS = {
   shirt: Shirt,
   smartphone: Smartphone,
   gift: Gift,
+  briefcase: Briefcase,
+  laptop: Laptop,
+  'arrow-left-right': ArrowLeftRight,
+  percent: Percent,
+  'rotate-ccw': RotateCcw,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

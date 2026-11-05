@@ -1,23 +1,28 @@
+import { useLocalSearchParams } from 'expo-router';
 import { type ReactNode, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
 import { categoryMeta } from '@/categories';
-import { CategoryBadge, EmptyView, ErrorView, IconButton, LoadingView, T } from '@/components/ui';
+import type { TxType } from '@/api';
+import { CategoryBadge, EmptyView, ErrorView, IconButton, LoadingView, SegmentedControl, T } from '@/components/ui';
 import { addMonths, formatMoney, inMonth, monthRange, monthTitle, sameMonth } from '@/format';
 import { goBack } from '@/navigation';
 import { useCategoryStats } from '@/queries';
 import { colors, radius, space, tints } from '@/theme';
 
 export default function StatsScreen() {
+  const params = useLocalSearchParams<{ type?: string }>();
+  const [type, setType] = useState<TxType>(params.type === 'income' ? 'income' : 'expense');
+  const income = type === 'income';
   const today = useMemo(() => new Date(), []);
   const [month, setMonth] = useState(() => addMonths(today, 0));
 
   const range = useMemo(() => monthRange(month), [month]);
   const prevRange = useMemo(() => monthRange(addMonths(month, -1)), [month]);
-  const stats = useCategoryStats(range);
-  const prev = useCategoryStats(prevRange);
+  const stats = useCategoryStats(range, type);
+  const prev = useCategoryStats(prevRange, type);
 
   const isCurrent = sameMonth(month, today);
 
@@ -25,19 +30,27 @@ export default function StatsScreen() {
   if (stats.isPending) body = <LoadingView />;
   else if (stats.error) body = <ErrorView message={stats.error.message} onRetry={() => stats.refetch()} />;
   else if (stats.data.total === 0)
-    body = <EmptyView icon="shopping-cart" title="Расходов нет" text={`${inMonth(month).replace('в', 'В')} вы ничего не тратили.`} />;
+    body = (
+      <EmptyView
+        icon={income ? 'briefcase' : 'shopping-cart'}
+        title={income ? 'Пополнений нет' : 'Расходов нет'}
+        text={`${inMonth(month).replace('в', 'В')} ${income ? 'пополнений не было' : 'вы ничего не тратили'}.`}
+      />
+    );
   else {
     const { total, items } = stats.data;
     const max = items[0]?.amount ?? 1;
     const prevTotal = prev.data?.total ?? 0;
     const delta = prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : null;
+    // Spending less is good news; earning less is not.
+    const deltaIsGood = delta !== null && (income ? delta > 0 : delta < 0);
 
     body = (
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.donutCard}>
           <Donut
             size={184}
-            segments={items.map((i) => ({ value: i.amount, color: tints[categoryMeta(i.category).tint].strong }))}
+            segments={items.map((i) => ({ value: i.amount, color: tints[categoryMeta(i.category, type).tint].strong }))}
           >
             <T variant="footnote" color={colors.textSecondary}>
               Всего
@@ -47,7 +60,7 @@ export default function StatsScreen() {
             </T>
           </Donut>
           {delta !== null && delta !== 0 && (
-            <T variant="footnote" color={delta < 0 ? colors.income : colors.expense}>
+            <T variant="footnote" color={deltaIsGood ? colors.income : colors.expense}>
               {delta < 0 ? `На ${-delta}% меньше` : `На ${delta}% больше`}, чем {inMonth(addMonths(month, -1))}
             </T>
           )}
@@ -55,8 +68,9 @@ export default function StatsScreen() {
 
         <View style={styles.list}>
           {items.map((i) => {
-            const meta = categoryMeta(i.category);
-            const share = Math.round((i.amount / total) * 100);
+            const meta = categoryMeta(i.category, type);
+            const percent = (i.amount / total) * 100;
+            const share = percent > 0 && percent < 1 ? '<1' : String(Math.round(percent));
             return (
               <View key={i.category} style={styles.row}>
                 <CategoryBadge category={meta} />
@@ -95,8 +109,18 @@ export default function StatsScreen() {
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.nav}>
         <IconButton icon="chevron-left" accessibilityLabel="Назад" onPress={goBack} />
-        <T variant="headline">Расходы</T>
+        <T variant="headline">По категориям</T>
         <View style={{ width: 40 }} />
+      </View>
+      <View style={styles.typeSwitch}>
+        <SegmentedControl
+          value={type}
+          onChange={setType}
+          options={[
+            { value: 'expense', label: 'Расходы' },
+            { value: 'income', label: 'Пополнения' },
+          ]}
+        />
       </View>
       <View style={styles.period}>
         <IconButton
@@ -185,6 +209,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  typeSwitch: { paddingHorizontal: space.lg, paddingTop: space.xs },
   content: { padding: space.lg, gap: space.lg, paddingBottom: space.xxxl },
   donutCard: {
     backgroundColor: colors.surface,

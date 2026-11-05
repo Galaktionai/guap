@@ -211,13 +211,21 @@ func (h *handler) deleteTransaction(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// GET /api/stats/categories?from=&to=
+// GET /api/stats/categories?type=expense|income&from=&to=  (type defaults to expense)
 func (h *handler) categoryStats(w http.ResponseWriter, r *http.Request) {
+	txType := r.URL.Query().Get("type")
+	if txType == "" {
+		txType = store.TypeExpense
+	}
+	if txType != store.TypeIncome && txType != store.TypeExpense {
+		writeError(w, http.StatusBadRequest, "Параметр type должен быть income или expense")
+		return
+	}
 	rng, ok := parseRange(w, r)
 	if !ok {
 		return
 	}
-	stats, err := h.store.CategoryStats(r.Context(), rng)
+	stats, err := h.store.CategoryStats(r.Context(), rng, txType)
 	if err != nil {
 		h.internal(w, r, err)
 		return

@@ -57,14 +57,19 @@ export default function HistoryScreen() {
       />
       {summary.data && (
         <View style={styles.summary}>
-          <View style={styles.summaryTile}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityHint="Открывает пополнения по категориям"
+            onPress={() => router.push({ pathname: '/stats', params: { type: 'income' } })}
+            style={({ pressed }) => [styles.summaryTile, pressed && { opacity: 0.7 }]}
+          >
             <T variant="footnote" color={colors.textSecondary}>
               Пополнения
             </T>
             <T variant="headline" color={colors.income} numeric>
               {formatMoney(summary.data.income, { sign: true })}
             </T>
-          </View>
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityHint="Открывает расходы по категориям"
