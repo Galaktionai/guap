@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 
-import type { AssetColor, AssetIcon, CategoryId } from './categories';
+import type { AssetColor, AssetIcon } from './categories';
 
 export type TxType = 'income' | 'expense';
 
@@ -20,7 +20,7 @@ export type Transaction = {
   asset_name: string;
   type: TxType;
   amount: number; // kopecks, always positive
-  category: CategoryId | null;
+  category: string | null;
   comment: string;
   is_initial: boolean;
   occurred_at: string;
@@ -36,8 +36,20 @@ export type Summary = {
 
 export type CategoryStats = {
   total: number;
-  items: { category: CategoryId; amount: number }[];
+  items: { category: string | null; amount: number }[];
 };
+
+export type Category = {
+  id: string;
+  type: TxType;
+  name: string;
+  icon: string;
+  color: string;
+  transactions_count: number;
+};
+
+/** What the user can change; the type is set once, on create. */
+export type CategoryInput = { name: string; icon: string; color: string };
 
 export type Range = { from?: string; to?: string };
 
@@ -47,7 +59,7 @@ export type NewTransaction = {
   asset_id: number;
   type: TxType;
   amount: number;
-  category: CategoryId | null;
+  category: string;
   comment: string;
   occurred_at: string;
 };
@@ -55,7 +67,7 @@ export type NewTransaction = {
 export type TransactionQuery = Range & {
   asset_id?: number;
   type?: TxType;
-  category?: CategoryId;
+  category?: string;
   limit?: number;
 };
 
@@ -116,6 +128,13 @@ export const api = {
   asset: (id: number) => request<Asset>(`/api/assets/${id}`),
   createAsset: (input: NewAsset) => request<Asset>('/api/assets', { method: 'POST', body: JSON.stringify(input) }),
   deleteAsset: (id: number) => request<void>(`/api/assets/${id}`, { method: 'DELETE' }),
+
+  categories: () => request<Category[]>('/api/categories'),
+  createCategory: (type: TxType, input: CategoryInput) =>
+    request<Category>('/api/categories', { method: 'POST', body: JSON.stringify({ type, ...input }) }),
+  updateCategory: (id: string, input: CategoryInput) =>
+    request<Category>(`/api/categories/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) }),
+  deleteCategory: (id: string) => request<void>(`/api/categories/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   transactions: (q: TransactionQuery) => request<Transaction[]>(`/api/transactions${query(q)}`),
   createTransaction: (input: NewTransaction) =>

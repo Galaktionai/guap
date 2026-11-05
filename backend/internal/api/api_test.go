@@ -231,14 +231,14 @@ func TestSummaryAndCategoryStats(t *testing.T) {
 	if stats.Total != 6_500_00 || len(stats.Items) != 2 {
 		t.Fatalf("stats = %+v", stats)
 	}
-	if stats.Items[0].Category != "groceries" || stats.Items[0].Amount != 4_000_00 {
+	if *stats.Items[0].Category != "groceries" || stats.Items[0].Amount != 4_000_00 {
 		t.Fatalf("largest category = %+v, want groceries 400000", stats.Items[0])
 	}
 
 	// Income breakdown: opening balances are not income.
 	var income store.CategoryStats
 	c.do("GET", "/api/stats/categories"+q+"&type=income", nil, &income)
-	if income.Total != 20_500_00 || len(income.Items) != 2 || income.Items[0].Category != "salary" {
+	if income.Total != 20_500_00 || len(income.Items) != 2 || *income.Items[0].Category != "salary" {
 		t.Fatalf("income stats = %+v, want salary 2000000 + cashback 50000", income)
 	}
 	if st := c.do("GET", "/api/stats/categories?type=transfer", nil, nil); st != http.StatusBadRequest {
@@ -272,8 +272,76 @@ func TestListFilters(t *testing.T) {
 
 	var cats []store.Category
 	c.do("GET", "/api/categories", nil, &cats)
-	if len(cats) != len(store.Categories) {
+	if len(cats) != len(store.DefaultCategories) {
 		t.Fatalf("categories: %d", len(cats))
+	}
+}
+
+func TestCategoryCRUD(t *testing.T) {
+	c := newClient(t)
+	a := c.createAsset("Карта", 10_000_00)
+
+	var pets store.Category
+	if st := c.do("POST", "/api/categories", map[string]any{"type": "expense", "name": "Питомцы", "icon": "paw-print", "color": "orange"}, &pets); st != http.StatusCreated {
+		t.Fatalf("create: status %d", st)
+	}
+	if pets.ID == "" || pets.Type != "expense" {
+		t.Fatalf("created category = %+v", pets)
+	}
+
+	// Names are unique per type, ignoring case (Cyrillic included)...
+	var body struct {
+		Fields map[string]string `json:"fields"`
+	}
+	if st := c.do("POST", "/api/categories", map[string]any{"type": "expense", "name": "питомцы", "icon": "gift", "color": "red"}, &body); st != http.StatusUnprocessableEntity || body.Fields["name"] == "" {
+		t.Fatalf("duplicate name: status %d, fields %v", st, body.Fields)
+	}
+	// ...but the same name is fine for the other type.
+	if st := c.do("POST", "/api/categories", map[string]any{"type": "income", "name": "Питомцы", "icon": "gift", "color": "red"}, nil); st != http.StatusCreated {
+		t.Fatalf("same name, other type: status %d", st)
+	}
+	if st := c.do("POST", "/api/categories", map[string]any{"type": "expense", "name": "X", "icon": "rocket", "color": "red"}, nil); st != http.StatusUnprocessableEntity {
+		t.Fatalf("unknown icon: status %d", st)
+	}
+
+	tx, st := c.createTx(map[string]any{"asset_id": a.ID, "type": "expense", "amount": 700_00, "category": pets.ID})
+	if st != http.StatusCreated {
+		t.Fatalf("expense in custom category: status %d", st)
+	}
+	if _, st := c.createTx(map[string]any{"asset_id": a.ID, "type": "income", "amount": 100, "category": pets.ID}); st != http.StatusUnprocessableEntity {
+		t.Fatalf("income in expense category: status %d", st)
+	}
+
+	var renamed store.Category
+	if st := c.do("PUT", "/api/categories/"+pets.ID, map[string]any{"name": "Кот", "icon": "paw-print", "color": "pink"}, &renamed); st != http.StatusOK {
+		t.Fatalf("update: status %d", st)
+	}
+	if renamed.Name != "Кот" || renamed.Color != "pink" || renamed.TransactionsCount != 1 {
+		t.Fatalf("updated category = %+v", renamed)
+	}
+	if st := c.do("PUT", "/api/categories/"+pets.ID, map[string]any{"type": "income", "name": "Кот", "icon": "paw-print", "color": "pink"}, nil); st != http.StatusUnprocessableEntity {
+		t.Fatalf("type change: status %d, want 422", st)
+	}
+
+	// Deleting a category keeps its transactions, now without a category.
+	if st := c.do("DELETE", "/api/categories/"+pets.ID, nil, nil); st != http.StatusNoContent {
+		t.Fatalf("delete: status %d", st)
+	}
+	if st := c.do("DELETE", "/api/categories/"+pets.ID, nil, nil); st != http.StatusNotFound {
+		t.Fatalf("second delete: status %d, want 404", st)
+	}
+	var list []store.Transaction
+	c.do("GET", "/api/transactions?type=expense", nil, &list)
+	if len(list) != 1 || list[0].ID != tx.ID || list[0].Category != nil {
+		t.Fatalf("transaction after category delete: %+v", list)
+	}
+	var stats store.CategoryStats
+	c.do("GET", "/api/stats/categories", nil, &stats)
+	if len(stats.Items) != 1 || stats.Items[0].Category != nil || stats.Items[0].Amount != 700_00 {
+		t.Fatalf("stats after category delete: %+v", stats)
+	}
+	if _, st := c.createTx(map[string]any{"asset_id": a.ID, "type": "expense", "amount": 100, "category": pets.ID}); st != http.StatusUnprocessableEntity {
+		t.Fatalf("expense in deleted category: status %d", st)
 	}
 }
 

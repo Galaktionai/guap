@@ -4,12 +4,12 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
-import { categoryMeta } from '@/categories';
+import { findCategory } from '@/categories';
 import type { TxType } from '@/api';
 import { CategoryBadge, EmptyView, ErrorView, IconButton, LoadingView, SegmentedControl, T } from '@/components/ui';
 import { addMonths, formatMoney, inMonth, monthRange, monthTitle, sameMonth } from '@/format';
 import { goBack } from '@/navigation';
-import { useCategoryStats } from '@/queries';
+import { useCategories, useCategoryStats } from '@/queries';
 import { colors, radius, space, tints } from '@/theme';
 
 export default function StatsScreen() {
@@ -21,6 +21,7 @@ export default function StatsScreen() {
 
   const range = useMemo(() => monthRange(month), [month]);
   const prevRange = useMemo(() => monthRange(addMonths(month, -1)), [month]);
+  const categories = useCategories();
   const stats = useCategoryStats(range, type);
   const prev = useCategoryStats(prevRange, type);
 
@@ -50,7 +51,7 @@ export default function StatsScreen() {
         <View style={styles.donutCard}>
           <Donut
             size={184}
-            segments={items.map((i) => ({ value: i.amount, color: tints[categoryMeta(i.category, type).tint].strong }))}
+            segments={items.map((i) => ({ value: i.amount, color: tints[findCategory(categories.data, i.category).tint].strong }))}
           >
             <T variant="footnote" color={colors.textSecondary}>
               Всего
@@ -68,11 +69,11 @@ export default function StatsScreen() {
 
         <View style={styles.list}>
           {items.map((i) => {
-            const meta = categoryMeta(i.category, type);
+            const meta = findCategory(categories.data, i.category);
             const percent = (i.amount / total) * 100;
             const share = percent > 0 && percent < 1 ? '<1' : String(Math.round(percent));
             return (
-              <View key={i.category} style={styles.row}>
+              <View key={i.category ?? 'none'} style={styles.row}>
                 <CategoryBadge category={meta} />
                 <View style={{ flex: 1, gap: space.sm }}>
                   <View style={styles.rowTop}>

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 )
 
@@ -41,9 +42,11 @@ func (s *Store) Summary(ctx context.Context, r Range) (Summary, error) {
 }
 
 // CategoryTotal is the amount spent in one category.
+// Category is nil for transactions without a category (for example after
+// their category was deleted).
 type CategoryTotal struct {
-	Category string `json:"category"`
-	Amount   int64  `json:"amount"`
+	Category *string `json:"category"`
+	Amount   int64   `json:"amount"`
 }
 
 // CategoryStats is the breakdown of expenses or income for a period,
@@ -54,20 +57,15 @@ type CategoryStats struct {
 }
 
 // CategoryStats sums transactions of type txType (TypeExpense or TypeIncome)
-// within r by category. Opening balances are not income and are left out;
-// income recorded before income categories existed counts as "other_income".
+// within r by category. Opening balances are not income and are left out.
 func (s *Store) CategoryStats(ctx context.Context, r Range, txType string) (CategoryStats, error) {
-	fallback := "other"
-	if txType == TypeIncome {
-		fallback = "other_income"
-	}
 	rangeSQL, rangeArgs := r.where("occurred_at")
-	args := append([]any{fallback, txType}, rangeArgs...)
+	args := append([]any{txType}, rangeArgs...)
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT COALESCE(category, ?), SUM(amount)
+		SELECT category, SUM(amount)
 		FROM transactions
 		WHERE type = ? AND is_initial = 0`+rangeSQL+`
-		GROUP BY 1
+		GROUP BY category
 		ORDER BY 2 DESC, 1`, args...)
 	if err != nil {
 		return CategoryStats{}, fmt.Errorf("category stats: %w", err)
@@ -76,9 +74,15 @@ func (s *Store) CategoryStats(ctx context.Context, r Range, txType string) (Cate
 
 	stats := CategoryStats{Items: []CategoryTotal{}}
 	for rows.Next() {
-		var c CategoryTotal
-		if err := rows.Scan(&c.Category, &c.Amount); err != nil {
+		var (
+			c        CategoryTotal
+			category sql.NullString
+		)
+		if err := rows.Scan(&category, &c.Amount); err != nil {
 			return CategoryStats{}, err
+		}
+		if category.Valid {
+			c.Category = &category.String
 		}
 		stats.Total += c.Amount
 		stats.Items = append(stats.Items, c)

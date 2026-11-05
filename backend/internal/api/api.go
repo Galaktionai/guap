@@ -22,6 +22,9 @@ func New(st *store.Store, log *slog.Logger) http.Handler {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	mux.HandleFunc("GET /api/categories", h.listCategories)
+	mux.HandleFunc("POST /api/categories", h.createCategory)
+	mux.HandleFunc("PUT /api/categories/{id}", h.updateCategory)
+	mux.HandleFunc("DELETE /api/categories/{id}", h.deleteCategory)
 	mux.HandleFunc("GET /api/summary", h.summary)
 
 	mux.HandleFunc("GET /api/assets", h.listAssets)

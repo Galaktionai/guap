@@ -17,6 +17,7 @@ import {
   T,
   TransactionRow,
   transactionTitle,
+  useFindCategory,
 } from '@/components/ui';
 import { countLabel, dayLabel, formatMoney, formatTxAmount, groupByDay, inMonth, sameMonth } from '@/format';
 import { goBack } from '@/navigation';
@@ -32,6 +33,7 @@ export default function AssetScreen() {
   const txs = useTransactions({ asset_id: assetId, limit: 200 });
   const deleteAsset = useDeleteAsset();
   const deleteTx = useDeleteTransaction();
+  const findCategory = useFindCategory();
 
   const now = useMemo(() => new Date(), []);
   const monthFlow = useMemo(() => {
@@ -148,7 +150,7 @@ export default function AssetScreen() {
                     <SwipeToDelete
                       key={t.id}
                       confirmTitle="Удалить операцию?"
-                      confirmMessage={`${transactionTitle(t)}, ${formatTxAmount(t.type, t.amount)}`}
+                      confirmMessage={`${transactionTitle(t, findCategory(t.category))}, ${formatTxAmount(t.type, t.amount)}`}
                       onDelete={() => deleteTx.mutate(t.id)}
                     >
                       <TransactionRow tx={t} context="asset" />

@@ -99,6 +99,17 @@ func (s *Store) CreateTransaction(ctx context.Context, in NewTransaction) (Trans
 	var category any
 	if in.Category != nil {
 		category = *in.Category
+		var catType string
+		err := s.db.QueryRowContext(ctx, `SELECT type FROM categories WHERE id = ?`, *in.Category).Scan(&catType)
+		if errors.Is(err, sql.ErrNoRows) {
+			return Transaction{}, ErrCategoryNotFound
+		}
+		if err != nil {
+			return Transaction{}, fmt.Errorf("check category: %w", err)
+		}
+		if catType != in.Type {
+			return Transaction{}, ErrCategoryType
+		}
 	}
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO transactions (asset_id, type, amount, category, comment, occurred_at, created_at)

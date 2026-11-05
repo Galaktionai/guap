@@ -1,10 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { api, type NewAsset, type NewTransaction, type Range, type TransactionQuery, type TxType } from './api';
+import {
+  api,
+  type CategoryInput,
+  type NewAsset,
+  type NewTransaction,
+  type Range,
+  type TransactionQuery,
+  type TxType,
+} from './api';
 
 export const keys = {
   summary: (r: Range) => ['summary', r] as const,
   stats: (r: Range, type: TxType) => ['stats', type, r] as const,
+  categories: ['categories'] as const,
   assets: ['assets'] as const,
   asset: (id: number) => ['assets', id] as const,
   transactions: (q: TransactionQuery) => ['transactions', q] as const,
@@ -13,6 +22,9 @@ export const keys = {
 export const useSummary = (r: Range) => useQuery({ queryKey: keys.summary(r), queryFn: () => api.summary(r) });
 export const useCategoryStats = (r: Range, type: TxType) =>
   useQuery({ queryKey: keys.stats(r, type), queryFn: () => api.categoryStats(r, type) });
+// Categories rarely change; keep them fresh for a minute.
+export const useCategories = () =>
+  useQuery({ queryKey: keys.categories, queryFn: api.categories, staleTime: 60_000 });
 export const useAssets = () => useQuery({ queryKey: keys.assets, queryFn: api.assets });
 export const useAsset = (id: number) => useQuery({ queryKey: keys.asset(id), queryFn: () => api.asset(id) });
 export const useTransactions = (q: TransactionQuery) =>
@@ -49,4 +61,18 @@ export function useCreateTransaction() {
 export function useDeleteTransaction() {
   const onSuccess = useInvalidateAll();
   return useMutation({ mutationFn: (id: number) => api.deleteTransaction(id), onSuccess });
+}
+
+export function useSaveCategory() {
+  const onSuccess = useInvalidateAll();
+  return useMutation({
+    mutationFn: (v: { id?: string; type: TxType; input: CategoryInput }) =>
+      v.id ? api.updateCategory(v.id, v.input) : api.createCategory(v.type, v.input),
+    onSuccess,
+  });
+}
+
+export function useDeleteCategory() {
+  const onSuccess = useInvalidateAll();
+  return useMutation({ mutationFn: (id: string) => api.deleteCategory(id), onSuccess });
 }

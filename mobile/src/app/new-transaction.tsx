@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ApiError, type TxType } from '@/api';
-import { categoriesFor, type CategoryId } from '@/categories';
+import { categoriesOfType, categoryLook } from '@/categories';
 import { Icon } from '@/components/Icon';
 import { inputStyle, Sheet } from '@/components/Sheet';
 import {
@@ -20,19 +20,20 @@ import {
 } from '@/components/ui';
 import { dateTimeLabel, formatAmountInput, formatMoney, parseAmount, sanitizeAmountInput } from '@/format';
 import { goBack } from '@/navigation';
-import { useAssets, useCreateTransaction } from '@/queries';
+import { useAssets, useCategories, useCreateTransaction } from '@/queries';
 import { colors, radius, space, typography } from '@/theme';
 
 export default function NewTransactionSheet() {
   const router = useRouter();
   const params = useLocalSearchParams<{ assetId?: string; type?: string }>();
   const assets = useAssets();
+  const categories = useCategories();
   const create = useCreateTransaction();
 
   const [type, setType] = useState<TxType>(params.type === 'income' ? 'income' : 'expense');
   const [amountRaw, setAmountRaw] = useState('');
   // Expense and income have separate category lists; each keeps its own choice.
-  const [categoryByType, setCategoryByType] = useState<Record<TxType, CategoryId | null>>({
+  const [categoryByType, setCategoryByType] = useState<Record<TxType, string | null>>({
     expense: null,
     income: null,
   });
@@ -57,7 +58,9 @@ export default function NewTransactionSheet() {
   const list = assets.data ?? [];
   const selectedAsset = list.find((a) => a.id === assetId) ?? list[0];
   const amount = parseAmount(amountRaw);
-  const category = categoryByType[type];
+  const typeCategories = categoriesOfType(categories.data, type);
+  // The chosen category may have been deleted on the categories screen.
+  const category = typeCategories.some((c) => c.id === categoryByType[type]) ? categoryByType[type] : null;
   const canSave = amount !== null && category !== null;
   const fields = create.error instanceof ApiError ? create.error.fields : {};
 
@@ -146,8 +149,9 @@ export default function NewTransactionSheet() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.chips}
         >
-          {categoriesFor(type).map((c) => {
+          {typeCategories.map((c) => {
             const selected = c.id === category;
+            const look = categoryLook(c);
             return (
               <Pressable
                 key={c.id}
@@ -158,7 +162,7 @@ export default function NewTransactionSheet() {
                 style={styles.chip}
               >
                 <View style={[styles.ring, selected && { borderColor: colors.accent }]}>
-                  <CategoryBadge category={c} size={52} />
+                  <CategoryBadge category={look} size={52} />
                 </View>
                 <T
                   variant="caption"
@@ -171,7 +175,23 @@ export default function NewTransactionSheet() {
               </Pressable>
             );
           })}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Настроить категории"
+            onPress={() => router.push({ pathname: '/categories', params: { type } })}
+            style={styles.chip}
+          >
+            <View style={styles.ring}>
+              <View style={styles.manage}>
+                <Icon name="tags" size={24} color={colors.textSecondary} />
+              </View>
+            </View>
+            <T variant="caption" color={colors.textSecondary} numberOfLines={1}>
+              Настроить
+            </T>
+          </Pressable>
         </ScrollView>
+        {categories.error && <FieldError message={`Категории не загрузились: ${categories.error.message}`} />}
         <FieldError message={fields.category} />
       </View>
 
@@ -278,6 +298,16 @@ const styles = StyleSheet.create({
   chips: { gap: 6, paddingRight: space.lg },
   chip: { width: 76, alignItems: 'center', gap: 6, paddingTop: 2 },
   ring: { borderWidth: 2.5, borderColor: 'transparent', borderRadius: 32, padding: 2 },
+  manage: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.textTertiary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   select: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   options: { marginTop: space.sm, backgroundColor: colors.muted, borderRadius: radius.md, paddingVertical: space.xs },
   option: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },

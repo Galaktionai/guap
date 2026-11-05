@@ -14,8 +14,9 @@ import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture
 import Animated, { type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
 import type { Asset, Transaction } from '../api';
-import { categoryMeta, type CategoryMeta } from '../categories';
+import { type CategoryLook, findCategory } from '../categories';
 import { countLabel, formatMoney, formatTxAmount, timeLabel } from '../format';
+import { useCategories } from '../queries';
 import { colors, radius, space, type Tint, tints, typography, type TypographyVariant } from '../theme';
 import { Icon, type IconName } from './Icon';
 
@@ -149,12 +150,12 @@ export function Badge({
   );
 }
 
-export function CategoryBadge({ category, size = 40 }: { category: CategoryMeta; size?: number }) {
+export function CategoryBadge({ category, size = 40 }: { category: CategoryLook; size?: number }) {
   return <Badge icon={category.icon} tint={category.tint} size={size} />;
 }
 
-function TransactionBadge({ tx }: { tx: Transaction }) {
-  if (tx.category || tx.type === 'expense') return <CategoryBadge category={categoryMeta(tx.category, tx.type)} />;
+function TransactionBadge({ tx, category }: { tx: Transaction; category: CategoryLook }) {
+  if (tx.category || tx.type === 'expense') return <CategoryBadge category={category} />;
   // Opening balances (and income saved before income categories existed).
   return (
     <View style={[styles.round40, { backgroundColor: colors.incomeSoft }]}>
@@ -273,9 +274,15 @@ export function AssetRow({ asset, onPress }: { asset: Asset; onPress?: () => voi
   );
 }
 
-export function transactionTitle(tx: Transaction): string {
+/** Resolves category ids against the categories loaded from the server. */
+export function useFindCategory() {
+  const { data } = useCategories();
+  return (id: string | null | undefined) => findCategory(data, id);
+}
+
+export function transactionTitle(tx: Transaction, category: CategoryLook): string {
   if (tx.is_initial) return 'Начальный баланс';
-  if (tx.category || tx.type === 'expense') return categoryMeta(tx.category, tx.type).name;
+  if (tx.category || tx.type === 'expense') return category.name;
   return tx.comment || 'Пополнение';
 }
 
@@ -289,15 +296,16 @@ function titleIsCategory(tx: Transaction): boolean {
  * is obvious, in the history it is shown.
  */
 export function TransactionRow({ tx, context }: { tx: Transaction; context: 'asset' | 'history' }) {
+  const category = useFindCategory()(tx.category);
   const time = timeLabel(new Date(tx.occurred_at));
   const comment = titleIsCategory(tx) ? tx.comment : '';
   const parts = context === 'history' ? [comment, tx.asset_name, time] : [comment, time];
   return (
     <View style={styles.txRow}>
-      <TransactionBadge tx={tx} />
+      <TransactionBadge tx={tx} category={category} />
       <View style={styles.flex}>
         <T variant="subhead" numberOfLines={1}>
-          {transactionTitle(tx)}
+          {transactionTitle(tx, category)}
         </T>
         <T variant="footnote" color={colors.textSecondary} numberOfLines={1}>
           {parts.filter(Boolean).join(' · ')}

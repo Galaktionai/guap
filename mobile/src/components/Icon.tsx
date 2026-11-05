@@ -2,8 +2,11 @@ import {
   ArrowDownLeft,
   ArrowLeftRight,
   ArrowUpRight,
+  Baby,
   Banknote,
+  BookOpen,
   Briefcase,
+  Bus,
   Calendar,
   Car,
   Check,
@@ -11,31 +14,47 @@ import {
   ChevronRight,
   Coffee,
   CreditCard,
+  Dumbbell,
   Ellipsis,
+  Film,
+  Fuel,
   Gamepad2,
   Gift,
+  GraduationCap,
   HeartPulse,
   History,
   House,
   Laptop,
   type LucideIcon,
   Minus,
+  Music,
+  PawPrint,
   Percent,
   PiggyBank,
+  Pill,
+  Plane,
   Plus,
   RotateCcw,
+  Scissors,
   Shirt,
   ShoppingCart,
   Smartphone,
+  Sparkles,
+  Tags,
   Trash2,
   TrendingUp,
+  Utensils,
   Wallet,
+  Wifi,
+  Wrench,
   X,
+  Zap,
 } from 'lucide-react-native';
 
 import { colors } from '../theme';
 
-// Icon names match the components in the Figma file (Icon/<name>).
+// Icon names match the components in the Figma file (Icon/<name>) and the
+// icon names the backend accepts for categories.
 const ICONS = {
   plus: Plus,
   minus: Minus,
@@ -46,6 +65,7 @@ const ICONS = {
   trash: Trash2,
   house: House,
   history: History,
+  tags: Tags,
   'arrow-down-left': ArrowDownLeft,
   'arrow-up-right': ArrowUpRight,
   wallet: Wallet,
@@ -57,12 +77,29 @@ const ICONS = {
   'more-horizontal': Ellipsis,
   'shopping-cart': ShoppingCart,
   coffee: Coffee,
+  utensils: Utensils,
   car: Car,
+  bus: Bus,
+  fuel: Fuel,
+  plane: Plane,
+  zap: Zap,
   'heart-pulse': HeartPulse,
+  pill: Pill,
+  dumbbell: Dumbbell,
   gamepad: Gamepad2,
+  film: Film,
+  music: Music,
+  'book-open': BookOpen,
+  'graduation-cap': GraduationCap,
   shirt: Shirt,
+  scissors: Scissors,
   smartphone: Smartphone,
+  wifi: Wifi,
   gift: Gift,
+  baby: Baby,
+  'paw-print': PawPrint,
+  wrench: Wrench,
+  sparkles: Sparkles,
   briefcase: Briefcase,
   laptop: Laptop,
   'arrow-left-right': ArrowLeftRight,
@@ -71,6 +108,10 @@ const ICONS = {
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;
+
+export function isIconName(name: string): name is IconName {
+  return name in ICONS;
+}
 
 export function Icon({ name, size = 24, color = colors.textPrimary }: { name: IconName; size?: number; color?: string }) {
   const Component = ICONS[name];

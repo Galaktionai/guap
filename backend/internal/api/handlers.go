@@ -10,10 +10,6 @@ import (
 	"guap/backend/internal/store"
 )
 
-func (h *handler) listCategories(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, store.Categories)
-}
-
 // GET /api/summary?from=&to=
 func (h *handler) summary(w http.ResponseWriter, r *http.Request) {
 	rng, ok := parseRange(w, r)
@@ -110,10 +106,6 @@ func (h *handler) listTransactions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Параметр type должен быть income или expense")
 		return
 	}
-	if f.Category != "" && !store.IsCategory(f.Category) {
-		writeError(w, http.StatusBadRequest, "Неизвестная категория")
-		return
-	}
 	for _, p := range []struct {
 		name     string
 		dst      *int
@@ -183,8 +175,17 @@ func (h *handler) createTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t, err := h.store.CreateTransaction(r.Context(), in)
-	if errors.Is(err, store.ErrAssetNotFound) {
+	switch {
+	case errors.Is(err, store.ErrAssetNotFound):
 		writeValidation(w, map[string]string{"asset_id": "Актив не найден"})
+		return
+	case errors.Is(err, store.ErrCategoryNotFound):
+		writeValidation(w, map[string]string{"category": "Категория не найдена — возможно, её удалили"})
+		return
+	case errors.Is(err, store.ErrCategoryType):
+		msg := map[string]string{store.TypeIncome: "Эта категория для расходов, а не пополнений",
+			store.TypeExpense: "Эта категория для пополнений, а не расходов"}[in.Type]
+		writeValidation(w, map[string]string{"category": msg})
 		return
 	}
 	if err != nil {

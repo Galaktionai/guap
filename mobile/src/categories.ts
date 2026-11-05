@@ -1,48 +1,45 @@
-import type { TxType } from './api';
-import type { IconName } from './components/Icon';
-import type { Tint } from './theme';
+import type { Category, TxType } from './api';
+import { type IconName, isIconName } from './components/Icon';
+import { type Tint, tints } from './theme';
 
-type Meta = { id: string; name: string; icon: IconName; tint: Tint };
+// Categories live on the server and are editable; these are the appearance
+// options. They mirror store.CategoryIcons / store.CategoryColors.
+export const CATEGORY_ICONS = [
+  'shopping-cart', 'coffee', 'utensils', 'car', 'bus', 'fuel', 'plane', 'house', 'zap',
+  'heart-pulse', 'pill', 'dumbbell', 'gamepad', 'film', 'music', 'book-open', 'graduation-cap',
+  'shirt', 'scissors', 'smartphone', 'wifi', 'gift', 'baby', 'paw-print', 'wrench',
+  'briefcase', 'laptop', 'arrow-left-right', 'percent', 'trending-up', 'rotate-ccw',
+  'piggy-bank', 'wallet', 'banknote', 'credit-card', 'sparkles', 'more-horizontal',
+] as const satisfies readonly IconName[];
 
-// Mirrors store.Categories in the Go backend (the server validates ids).
-// Expense and income categories are separate lists with unique ids.
-export const EXPENSE_CATEGORIES = [
-  { id: 'groceries', name: 'Продукты', icon: 'shopping-cart', tint: 'orange' },
-  { id: 'cafe', name: 'Кафе', icon: 'coffee', tint: 'yellow' },
-  { id: 'transport', name: 'Транспорт', icon: 'car', tint: 'blue' },
-  { id: 'home', name: 'Дом', icon: 'house', tint: 'teal' },
-  { id: 'health', name: 'Здоровье', icon: 'heart-pulse', tint: 'red' },
-  { id: 'entertainment', name: 'Развлечения', icon: 'gamepad', tint: 'purple' },
-  { id: 'clothes', name: 'Одежда', icon: 'shirt', tint: 'pink' },
-  { id: 'connection', name: 'Связь', icon: 'smartphone', tint: 'indigo' },
-  { id: 'gifts', name: 'Подарки', icon: 'gift', tint: 'green' },
-  { id: 'other', name: 'Другое', icon: 'more-horizontal', tint: 'gray' },
-] as const satisfies readonly Meta[];
+export const CATEGORY_COLORS = [
+  'blue', 'green', 'orange', 'teal', 'red', 'yellow', 'pink', 'purple', 'indigo', 'gray',
+] as const satisfies readonly Tint[];
 
-export const INCOME_CATEGORIES = [
-  { id: 'salary', name: 'Зарплата', icon: 'briefcase', tint: 'green' },
-  { id: 'side_job', name: 'Подработка', icon: 'laptop', tint: 'blue' },
-  { id: 'transfer_in', name: 'Перевод', icon: 'arrow-left-right', tint: 'teal' },
-  { id: 'cashback', name: 'Кэшбэк', icon: 'percent', tint: 'orange' },
-  { id: 'interest', name: 'Проценты', icon: 'trending-up', tint: 'indigo' },
-  { id: 'gift_in', name: 'Подарок', icon: 'gift', tint: 'pink' },
-  { id: 'refund', name: 'Возврат', icon: 'rotate-ccw', tint: 'yellow' },
-  { id: 'other_income', name: 'Другое', icon: 'more-horizontal', tint: 'gray' },
-] as const satisfies readonly Meta[];
+/** What a row or chart needs to draw a category. */
+export type CategoryLook = { id: string | null; name: string; icon: IconName; tint: Tint };
 
-export type ExpenseCategoryId = (typeof EXPENSE_CATEGORIES)[number]['id'];
-export type IncomeCategoryId = (typeof INCOME_CATEGORIES)[number]['id'];
-export type CategoryId = ExpenseCategoryId | IncomeCategoryId;
-export type CategoryMeta = (typeof EXPENSE_CATEGORIES)[number] | (typeof INCOME_CATEGORIES)[number];
+/** Shown for transactions whose category was deleted. */
+export const UNCATEGORIZED: CategoryLook = { id: null, name: 'Без категории', icon: 'more-horizontal', tint: 'gray' };
 
-export function categoriesFor(type: TxType): readonly CategoryMeta[] {
-  return type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+export function categoryLook(c: Pick<Category, 'id' | 'name' | 'icon' | 'color'>): CategoryLook {
+  return {
+    id: c.id,
+    name: c.name,
+    // Fall back gracefully if the server knows an icon or color this build does not.
+    icon: isIconName(c.icon) ? c.icon : 'more-horizontal',
+    tint: c.color in tints ? (c.color as Tint) : 'gray',
+  };
 }
 
-/** Category for display; unknown or missing ids fall back to "Другое" of that type. */
-export function categoryMeta(id: string | null | undefined, type: TxType = 'expense'): CategoryMeta {
-  const list = categoriesFor(type);
-  return list.find((c) => c.id === id) ?? list[list.length - 1];
+/** Finds a category by id; null or deleted ids give UNCATEGORIZED. */
+export function findCategory(list: Category[] | undefined, id: string | null | undefined): CategoryLook {
+  const c = id ? list?.find((x) => x.id === id) : undefined;
+  return c ? categoryLook(c) : UNCATEGORIZED;
+}
+
+export function categoriesOfType(list: Category[] | undefined, type: TxType): Category[] {
+  return (list ?? []).filter((c) => c.type === type);
 }
 
 // Asset appearance options; mirror store.AssetIcons / store.AssetColors.

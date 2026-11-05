@@ -1,4 +1,4 @@
-// Package store keeps assets and transactions in SQLite.
+// Package store keeps assets, transactions and categories in SQLite.
 package store
 
 import (
@@ -16,6 +16,12 @@ var (
 	ErrNotFound = errors.New("not found")
 	// ErrAssetNotFound is returned when a transaction references a missing asset.
 	ErrAssetNotFound = errors.New("asset not found")
+	// ErrCategoryNotFound is returned when a transaction references a missing category.
+	ErrCategoryNotFound = errors.New("category not found")
+	// ErrCategoryType is returned when a transaction's category is of the other type.
+	ErrCategoryType = errors.New("category type does not match transaction type")
+	// ErrDuplicateCategory is returned when a category name is already taken for that type.
+	ErrDuplicateCategory = errors.New("duplicate category name")
 )
 
 // Store is the data access layer.
@@ -46,34 +52,89 @@ func Open(ctx context.Context, path string) (*Store, error) {
 // Close closes the database.
 func (s *Store) Close() error { return s.db.Close() }
 
-const schema = `
-CREATE TABLE IF NOT EXISTS assets (
-	id         INTEGER PRIMARY KEY AUTOINCREMENT,
-	name       TEXT    NOT NULL,
-	icon       TEXT    NOT NULL,
-	color      TEXT    NOT NULL,
-	created_at INTEGER NOT NULL
-);
+// migrations upgrade the schema step by step. PRAGMA user_version stores how
+// many have been applied, so each runs exactly once per database. Never edit
+// a migration that has shipped; append a new one instead.
+var migrations = []func(ctx context.Context, tx *sql.Tx) error{
+	// 1: assets and transactions. IF NOT EXISTS keeps databases created
+	// before versioning was introduced working.
+	func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS assets (
+				id         INTEGER PRIMARY KEY AUTOINCREMENT,
+				name       TEXT    NOT NULL,
+				icon       TEXT    NOT NULL,
+				color      TEXT    NOT NULL,
+				created_at INTEGER NOT NULL
+			);
 
-CREATE TABLE IF NOT EXISTS transactions (
-	id          INTEGER PRIMARY KEY AUTOINCREMENT,
-	asset_id    INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
-	type        TEXT    NOT NULL CHECK (type IN ('income', 'expense')),
-	amount      INTEGER NOT NULL CHECK (amount > 0),
-	category    TEXT,
-	comment     TEXT    NOT NULL DEFAULT '',
-	is_initial  INTEGER NOT NULL DEFAULT 0,
-	occurred_at INTEGER NOT NULL,
-	created_at  INTEGER NOT NULL
-);
+			CREATE TABLE IF NOT EXISTS transactions (
+				id          INTEGER PRIMARY KEY AUTOINCREMENT,
+				asset_id    INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+				type        TEXT    NOT NULL CHECK (type IN ('income', 'expense')),
+				amount      INTEGER NOT NULL CHECK (amount > 0),
+				category    TEXT,
+				comment     TEXT    NOT NULL DEFAULT '',
+				is_initial  INTEGER NOT NULL DEFAULT 0,
+				occurred_at INTEGER NOT NULL,
+				created_at  INTEGER NOT NULL
+			);
 
-CREATE INDEX IF NOT EXISTS idx_transactions_asset ON transactions(asset_id, occurred_at DESC);
-CREATE INDEX IF NOT EXISTS idx_transactions_time  ON transactions(occurred_at DESC);
-`
+			CREATE INDEX IF NOT EXISTS idx_transactions_asset ON transactions(asset_id, occurred_at DESC);
+			CREATE INDEX IF NOT EXISTS idx_transactions_time  ON transactions(occurred_at DESC);`)
+		return err
+	},
+	// 2: user-editable categories, seeded with the defaults. Default ids match
+	// the ones transactions already reference.
+	func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			CREATE TABLE categories (
+				id         TEXT    PRIMARY KEY,
+				type       TEXT    NOT NULL CHECK (type IN ('income', 'expense')),
+				name       TEXT    NOT NULL,
+				icon       TEXT    NOT NULL,
+				color      TEXT    NOT NULL,
+				position   INTEGER NOT NULL,
+				created_at INTEGER NOT NULL
+			);
+			CREATE INDEX idx_categories_type ON categories(type, position);
+			CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);`)
+		if err != nil {
+			return err
+		}
+		now := ms(time.Now())
+		for i, c := range DefaultCategories {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO categories (id, type, name, icon, color, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+				c.ID, c.Type, c.Name, c.Icon, c.Color, i, now); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
 
 func (s *Store) migrate(ctx context.Context) error {
-	if _, err := s.db.ExecContext(ctx, schema); err != nil {
-		return fmt.Errorf("migrate: %w", err)
+	var version int
+	if err := s.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		return fmt.Errorf("read schema version: %w", err)
+	}
+	for i := version; i < len(migrations); i++ {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		if err := migrations[i](ctx, tx); err != nil {
+			tx.Rollback() //nolint:errcheck
+			return fmt.Errorf("migration %d: %w", i+1, err)
+		}
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", i+1)); err != nil {
+			tx.Rollback() //nolint:errcheck
+			return fmt.Errorf("migration %d: set version: %w", i+1, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("migration %d: commit: %w", i+1, err)
+		}
 	}
 	return nil
 }

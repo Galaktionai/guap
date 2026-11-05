@@ -14,6 +14,7 @@ import {
   T,
   TransactionRow,
   transactionTitle,
+  useFindCategory,
 } from '@/components/ui';
 import { dayLabel, formatMoney, formatTxAmount, groupByDay, monthRange, monthTitle } from '@/format';
 import { useDeleteTransaction, useSummary, useTransactions } from '@/queries';
@@ -32,6 +33,7 @@ export default function HistoryScreen() {
   const summary = useSummary(range);
   const txs = useTransactions({ type: filter === 'all' ? undefined : filter, limit: HISTORY_LIMIT });
   const remove = useDeleteTransaction();
+  const findCategory = useFindCategory();
 
   const sections = useMemo(
     () =>
@@ -121,7 +123,7 @@ export default function HistoryScreen() {
           >
             <SwipeToDelete
               confirmTitle="Удалить операцию?"
-              confirmMessage={`${transactionTitle(item)}, ${formatTxAmount(item.type, item.amount)}`}
+              confirmMessage={`${transactionTitle(item, findCategory(item.category))}, ${formatTxAmount(item.type, item.amount)}`}
               onDelete={() => remove.mutate(item.id)}
             >
               <TransactionRow tx={item} context="history" />

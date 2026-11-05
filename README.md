@@ -53,6 +53,11 @@ cd mobile && npx tsc --noEmit
 | POST | `/api/transactions` | Добавить операцию: `asset_id`, `type` (`income`/`expense`), `amount`, `category` (обязательна; категория того же типа, что и операция), `comment`, `occurred_at` |
 | DELETE | `/api/transactions/{id}` | Удалить операцию |
 | GET | `/api/stats/categories?type=expense\|income&from=&to=` | Расходы или пополнения по категориям за период (по умолчанию расходы) |
-| GET | `/api/categories` | Категории расходов и пополнений (поле `type`) |
+| GET | `/api/categories?type=` | Категории расходов и пополнений с числом операций |
+| POST | `/api/categories` | Создать категорию: `type`, `name`, `icon`, `color` |
+| PUT | `/api/categories/{id}` | Изменить название, иконку и цвет (тип менять нельзя) |
+| DELETE | `/api/categories/{id}` | Удалить категорию; её операции остаются без категории |
 
 Начальный баланс актива записывается в историю как пополнение с `is_initial: true`; в сумму пополнений за месяц он не входит.
+
+Категории хранятся в базе и редактируются пользователем; при создании базы добавляются стандартные. Схема базы обновляется автоматически при запуске сервера (миграции в `backend/internal/store/store.go`, версия хранится в `PRAGMA user_version`).

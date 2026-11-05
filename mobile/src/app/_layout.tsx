@@ -19,8 +19,10 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="asset/[id]" />
           <Stack.Screen name="stats" />
+          <Stack.Screen name="categories" />
           <Stack.Screen name="new-transaction" options={{ presentation: 'modal', contentStyle: { backgroundColor: colors.surface } }} />
           <Stack.Screen name="new-asset" options={{ presentation: 'modal', contentStyle: { backgroundColor: colors.surface } }} />
+          <Stack.Screen name="category-edit" options={{ presentation: 'modal', contentStyle: { backgroundColor: colors.surface } }} />
         </Stack>
       </QueryClientProvider>
     </GestureHandlerRootView>

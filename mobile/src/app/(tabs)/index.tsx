@@ -4,7 +4,7 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-n
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/Icon';
-import { AssetRow, EmptyView, ErrorView, LoadingView, SectionHeader, T } from '@/components/ui';
+import { AssetRow, EmptyView, ErrorView, IconButton, LoadingView, SectionHeader, T } from '@/components/ui';
 import { countLabel, formatMoney, monthRange, monthTitle } from '@/format';
 import { useAssets, useSummary } from '@/queries';
 import { colors, radius, space } from '@/theme';
@@ -79,10 +79,13 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.header}>
-        <T variant="subhead" color={colors.textSecondary}>
-          {monthTitle(now)}
-        </T>
-        <T variant="titleLarge">Мои финансы</T>
+        <View style={{ flex: 1, gap: 2 }}>
+          <T variant="subhead" color={colors.textSecondary}>
+            {monthTitle(now)}
+          </T>
+          <T variant="titleLarge">Мои финансы</T>
+        </View>
+        <IconButton icon="tags" accessibilityLabel="Категории" onPress={() => router.push('/categories')} />
       </View>
       {body}
     </SafeAreaView>
@@ -114,7 +117,14 @@ function HeroStat({ kind, amount, onPress }: { kind: 'income' | 'expense'; amoun
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bgBase },
-  header: { paddingHorizontal: space.lg, paddingTop: space.xs, paddingBottom: space.sm, gap: 2 },
+  header: {
+    paddingHorizontal: space.lg,
+    paddingTop: space.xs,
+    paddingBottom: space.sm,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: space.md,
+  },
   content: { padding: space.lg, paddingTop: space.md, gap: space.xxl, paddingBottom: space.xxxl },
   hero: {
     backgroundColor: colors.accent,
