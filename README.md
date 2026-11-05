@@ -1,0 +1,58 @@
+# Трекер финансов
+
+Мобильное приложение для учёта денег: активы (карты, наличные, накопления), пополнения и расходы по категориям, общий бюджет и история.
+
+- `backend/` — API на Go, данные в SQLite (без внешних сервисов).
+- `mobile/` — приложение на React Native (Expo, Expo Router).
+- Дизайн: [Figma «Трекер финансов»](https://www.figma.com/design/j1p3HtRLwAXDcsnT8rGpyK).
+
+## Что нужно установить
+
+```bash
+brew install go node
+```
+
+На iPhone — приложение **Expo Go** из App Store (телефон и Mac в одной Wi‑Fi сети).
+Для iOS‑симулятора дополнительно нужен Xcode.
+
+## Запуск
+
+Бэкенд (слушает порт 8080, база — файл `backend/guap.db`):
+
+```bash
+cd backend && go run ./cmd/server
+```
+
+Приложение (в другом терминале):
+
+```bash
+cd mobile && npm install && npx expo start
+```
+
+Отсканируйте QR‑код камерой iPhone — откроется Expo Go. Приложение само обращается к порту 8080 на том Mac, где запущен Expo. Другой адрес API можно задать переменной `EXPO_PUBLIC_API_URL`.
+
+## Тесты
+
+```bash
+cd backend && go test ./...
+cd mobile && npx tsc --noEmit
+```
+
+## API
+
+Все суммы — целые числа в копейках. Даты — RFC 3339.
+
+| Метод | Путь | Что делает |
+|---|---|---|
+| GET | `/api/summary?from=&to=` | Общий бюджет, число активов, пополнения и расходы за период |
+| GET | `/api/assets` | Активы с балансами |
+| POST | `/api/assets` | Создать актив: `name`, `icon`, `color`, `initial_balance` |
+| GET | `/api/assets/{id}` | Один актив |
+| DELETE | `/api/assets/{id}` | Удалить актив вместе с его операциями |
+| GET | `/api/transactions?asset_id=&type=&category=&from=&to=&limit=&offset=` | История, новые сверху |
+| POST | `/api/transactions` | Добавить операцию: `asset_id`, `type` (`income`/`expense`), `amount`, `category` (только для расходов), `comment`, `occurred_at` |
+| DELETE | `/api/transactions/{id}` | Удалить операцию |
+| GET | `/api/stats/categories?from=&to=` | Расходы по категориям за период |
+| GET | `/api/categories` | Список категорий |
+
+Начальный баланс актива записывается в историю как пополнение с `is_initial: true`; в сумму пополнений за месяц он не входит.

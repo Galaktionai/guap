@@ -1,0 +1,20 @@
+# Backend
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+backend/bin/
+
+# Mobile
+node_modules/
+.expo/
+mobile/expo-env.d.ts
+mobile/ios/
+mobile/android/
+.metro-health-check*
+dist/
+web-build/
+*.tsbuildinfo
+.env*.local
+
+# macOS
+.DS_Store
