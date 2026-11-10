@@ -97,6 +97,30 @@ func (s *Store) UserByEmail(ctx context.Context, email string) (User, string, er
 	return u, hash, nil
 }
 
+// SetPassword replaces a user's password hash, found by email, and ends all
+// of that user's sessions so an old password can no longer be used. It
+// reports ErrNotFound when no user has that email.
+func (s *Store) SetPassword(ctx context.Context, email, passwordHash string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op after Commit
+
+	res, err := tx.ExecContext(ctx, `UPDATE users SET password_hash = ? WHERE email = ?`, passwordHash, email)
+	if err != nil {
+		return fmt.Errorf("update password: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM sessions WHERE user_id = (SELECT id FROM users WHERE email = ?)`, email); err != nil {
+		return fmt.Errorf("delete sessions: %w", err)
+	}
+	return tx.Commit()
+}
+
 // GetUser returns a user by id.
 func (s *Store) GetUser(ctx context.Context, id int64) (User, error) {
 	var (
